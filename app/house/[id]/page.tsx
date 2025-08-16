@@ -15,31 +15,63 @@ export default function HousePage() {
   const [loading, setLoading] = useState(true)
   const [authChecked, setAuthChecked] = useState(false)
 
-  // Check authentication first
+  // Check authentication first with better handling
   useEffect(() => {
-    const user = getCurrentUser()
-    if (!user) {
-      // Store the intended destination for after login
+    const checkAuth = () => {
+      console.log("Checking authentication...")
+      // Check if user is authenticated via localStorage
+      const isAuthenticated = localStorage.getItem("isAuthenticated")
+      const userData = localStorage.getItem("userData")
+      
+      console.log("Auth status:", isAuthenticated)
+      console.log("User data exists:", !!userData)
+      
+      if (isAuthenticated === "true" && userData) {
+        try {
+          const user = JSON.parse(userData)
+          console.log("Parsed user:", user)
+          if (user && user.uid) {
+            console.log("User authenticated, setting authChecked to true")
+            setAuthChecked(true)
+            return
+          }
+        } catch (error) {
+          console.error("Error parsing user data:", error)
+        }
+      }
+      
+      console.log("User not authenticated, redirecting to login")
+      // If not authenticated, redirect to login
       localStorage.setItem("redirectAfterLogin", `/house/${id}`)
       router.push("/login?message=house-details")
-      return
     }
-    setAuthChecked(true)
+
+    // Add a small delay to ensure localStorage is available
+    const timer = setTimeout(checkAuth, 100)
+    
+    return () => clearTimeout(timer)
   }, [id, router])
 
   useEffect(() => {
-    if (!id || !authChecked) return
+    console.log("Data fetch effect triggered - id:", id, "authChecked:", authChecked)
+    if (!id || !authChecked) {
+      console.log("Skipping data fetch - missing id or auth not checked")
+      return
+    }
 
     const fetchData = async () => {
       try {
+        console.log("Fetching house data for ID:", id)
         const snapshot = await get(ref(db, `property/${id}`))
 
         if (!snapshot.exists()) {
+          console.log("House not found in database")
           router.push("/not-found")
           return
         }
 
         const data = snapshot.val()
+        console.log("House data received:", data)
 
         const formatted = {
           id,
@@ -69,16 +101,19 @@ export default function HousePage() {
           },
         }
 
+        console.log("Formatted house data:", formatted)
         setHouse(formatted)
       } catch (error) {
         console.error("Error fetching house:", error)
+        // Show error to user
+        setLoading(false)
       } finally {
         setLoading(false)
       }
     }
 
     fetchData()
-  }, [id, router])
+  }, [id, authChecked, router])
 
   if (!authChecked) {
     return (
@@ -107,6 +142,7 @@ export default function HousePage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-500 text-lg">House not found</p>
+          <p className="text-gray-600 mt-2">The house details could not be loaded.</p>
         </div>
       </div>
     )
