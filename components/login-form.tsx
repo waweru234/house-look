@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Eye, EyeOff, Mail, Lock, ArrowRight, Sparkles, Home } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { loginWithEmail, loginWithGoogle } from "@/lib/auth"
 export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
@@ -19,6 +19,8 @@ export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [isAnimated, setIsAnimated] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const message = searchParams.get('message')
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -33,7 +35,11 @@ const handleSubmit = async (e: React.FormEvent) => {
 
   try {
     const user = await loginWithEmail(email, password)
-    if (user.isAdmin) {
+    const redirectPath = localStorage.getItem("redirectAfterLogin")
+    if (redirectPath) {
+      localStorage.removeItem("redirectAfterLogin")
+      router.push(redirectPath)
+    } else if (user.isAdmin) {
       router.push("/admin")
     } else {
       router.push("/dashboard")
@@ -50,7 +56,11 @@ const handleGoogleLogin = async () => {
   setIsLoading(true)
   try {
     const user = await loginWithGoogle()
-    if (user.isAdmin) {
+    const redirectPath = localStorage.getItem("redirectAfterLogin")
+    if (redirectPath) {
+      localStorage.removeItem("redirectAfterLogin")
+      router.push(redirectPath)
+    } else if (user.isAdmin) {
       router.push("/admin")
     } else {
       router.push("/dashboard")
@@ -104,7 +114,12 @@ const handleGoogleLogin = async () => {
           </Link>
 
           <h1 className="text-3xl font-black font-heading text-houselook-black mb-2">Welcome Back! 👋</h1>
-          <p className="text-base text-houselook-darkGray">Sign in to continue your house hunting journey</p>
+          <p className="text-base text-houselook-darkGray">
+            {message === 'house-details' 
+              ? "Sign in to view house details and save your favorite properties!" 
+              : "Sign in to continue your house hunting journey"
+            }
+          </p>
         </div>
 
         {/* Login Card */}
@@ -115,11 +130,30 @@ const handleGoogleLogin = async () => {
             <CardTitle className="text-xl font-bold text-houselook-black font-heading">Sign In</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Special Banner for House Details Access */}
+            {message === 'house-details' && (
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mb-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <Home className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-semibold text-blue-800">Quick Access to House Details</h3>
+                    <p className="text-sm text-blue-700 mt-1">
+                      Use Google Sign-In for the fastest way to view property details and save your favorites!
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Google Login Button */}
             <Button
               onClick={handleGoogleLogin}
               disabled={isLoading}
-              className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 shadow-sm hover:shadow-md transition-all duration-300 py-3 rounded-xl font-semibold"
+              className={`w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 shadow-sm hover:shadow-md transition-all duration-300 py-3 rounded-xl font-semibold ${
+                message === 'house-details' ? 'ring-2 ring-blue-500 ring-opacity-50' : ''
+              }`}
             >
               <div className="flex items-center justify-center">
                 <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
@@ -140,7 +174,7 @@ const handleGoogleLogin = async () => {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                   />
                 </svg>
-                {isLoading ? "Signing in..." : "Continue with Google"}
+                {isLoading ? "Signing in..." : message === 'house-details' ? "Quick Sign-In with Google" : "Continue with Google"}
               </div>
             </Button>
 

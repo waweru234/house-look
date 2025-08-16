@@ -72,20 +72,25 @@ export function Navigation() {
     <nav className="fixed top-0 left-0 right-0 z-50 font-sans pointer-events-none">
       {/* No background, border, or shadow - only floating content */}
       <div className="relative max-w-7xl mx-auto px-4 pointer-events-auto">
-        <div className="flex justify-between items-center h-16">
-          {/* Compact Logo */}
-          <Link href="/" className="flex items-center space-x-2 group" style={{ pointerEvents: 'auto' }}>
-            <div className="w-12 h-12 flex items-center justify-center relative">
+        <div className="flex justify-between items-center h-20">
+          {/* Beautiful Large Logo */}
+          <Link href="/" className="flex items-center space-x-3 group" style={{ pointerEvents: 'auto' }}>
+            <div className="w-16 h-16 flex items-center justify-center relative group-hover:scale-110 transition-transform duration-300">
               <Image
                 src="/images/houselooklogo.png"
                 alt="HouseLook Logo"
-                width={72}
-                height={72}
-                className="w-16 h-16 object-contain"
+                width={125}
+                height={125}
+                className="w-16 h-16 object-contain drop-shadow-lg group-hover:drop-shadow-xl transition-all duration-300"
                 priority
               />
             </div>
-            <span className="text-xl font-black tracking-tight text-houselook-cyan" style={{ fontFamily: 'Perpetua, serif' }}>HouseLook</span>
+            <div className="flex flex-col leading-tight">
+              <span className="text-lg font-black tracking-tight bg-gradient-to-r from-houselook-cyan to-houselook-blue bg-clip-text text-transparent group-hover:from-houselook-blue group-hover:to-houselook-cyan transition-all duration-300" style={{ fontFamily: 'Perpetua, serif' }}>
+                HouseLook
+              </span>
+              
+            </div>
           </Link>
           {/* Desktop Nav Links */}
           <div className="hidden md:flex items-center space-x-6" style={{ pointerEvents: 'auto' }}>
@@ -127,7 +132,7 @@ export function Navigation() {
         </div>
         {/* Mobile Drawer */}
         {isOpen && (
-          <div className="md:hidden absolute top-16 left-0 right-0 flex flex-col items-center space-y-2 py-6 bg-transparent" style={{ pointerEvents: 'auto' }}>
+          <div className="md:hidden absolute top-16 left-0 right-0 flex flex-col items-center space-y-2 py-6 bg-white border-2 border-houselook-cyan shadow-lg rounded-lg mx-4" style={{ pointerEvents: 'auto' }}>
             <Link href="/" className={`font-bold px-4 py-2 rounded-lg w-full text-center ${isActive("/") ? "text-houselook-cyan" : "text-houselook-blue hover:text-houselook-cyan"}`} style={{ fontFamily: 'Perpetua, serif', background: 'none', boxShadow: 'none' }} onClick={() => setIsOpen(false)}>Home</Link>
             <Link href="/listings" className={`font-bold px-4 py-2 rounded-lg w-full text-center ${isActive("/listings") ? "text-houselook-cyan" : "text-houselook-blue hover:text-houselook-cyan"}`} style={{ fontFamily: 'Perpetua, serif', background: 'none', boxShadow: 'none' }} onClick={() => setIsOpen(false)}>Browse</Link>
             <Link href="/saved" className={`font-bold px-4 py-2 rounded-lg w-full text-center ${isActive("/saved") ? "text-houselook-cyan" : "text-houselook-blue hover:text-houselook-cyan"}`} style={{ fontFamily: 'Comic Sans MS, Comic Sans, cursive, sans-serif', background: 'none', boxShadow: 'none' }} onClick={() => setIsOpen(false)}>Saved</Link>
@@ -156,12 +161,12 @@ export function Navigation() {
           </div>
         )}
       </div>
-      {/* Bottom nav for mobile - floating, no background, border, or shadow */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden flex justify-around py-2 bg-transparent" style={{ pointerEvents: 'auto' }}>
-        <Link href="/" className={`flex flex-col items-center ${isActive("/") ? "text-houselook-cyan" : "text-houselook-blue"}`} style={{ fontFamily: 'Perpetua, serif', background: 'none', boxShadow: 'none' }}><Home className="w-6 h-6" /></Link>
-        <Link href="/listings" className={`flex flex-col items-center ${isActive("/listings") ? "text-houselook-cyan" : "text-houselook-blue"}`} style={{ fontFamily: 'Perpetua, serif', background: 'none', boxShadow: 'none' }}><Search className="w-6 h-6" /></Link>
-        <Link href="/saved" className={`flex flex-col items-center ${isActive("/saved") ? "text-houselook-cyan" : "text-houselook-blue"}`} style={{ fontFamily: 'Comic Sans MS, Comic Sans, cursive, sans-serif', background: 'none', boxShadow: 'none' }}><Heart className="w-6 h-6" /></Link>
-        <Link href="/about" className={`flex flex-col items-center ${isActive("/about") ? "text-houselook-cyan" : "text-houselook-blue"}`} style={{ fontFamily: 'Comic Sans MS, Comic Sans, cursive, sans-serif', background: 'none', boxShadow: 'none' }}><Info className="w-6 h-6" /></Link>
+      {/* Bottom nav for mobile - with platform background */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden flex justify-around py-3 bg-white border-t-2 border-houselook-cyan shadow-lg" style={{ pointerEvents: 'auto' }}>
+        <Link href="/" className={`flex flex-col items-center ${isActive("/") ? "text-houselook-cyan" : "text-houselook-blue"}`} style={{ fontFamily: 'Perpetua, serif' }}><Home className="w-6 h-6" /></Link>
+        <Link href="/listings" className={`flex flex-col items-center ${isActive("/listings") ? "text-houselook-cyan" : "text-houselook-blue"}`} style={{ fontFamily: 'Perpetua, serif' }}><Search className="w-6 h-6" /></Link>
+        <Link href="/saved" className={`flex flex-col items-center ${isActive("/saved") ? "text-houselook-cyan" : "text-houselook-blue"}`} style={{ fontFamily: 'Comic Sans MS, Comic Sans, cursive, sans-serif' }}><Heart className="w-6 h-6" /></Link>
+        <Link href="/about" className={`flex flex-col items-center ${isActive("/about") ? "text-houselook-cyan" : "text-houselook-blue"}`} style={{ fontFamily: 'Comic Sans MS, Comic Sans, cursive, sans-serif' }}><Info className="w-6 h-6" /></Link>
       </div>
     </nav>
   )

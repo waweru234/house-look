@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { getCurrentUser } from "@/lib/auth"
 import { getDatabase, ref, get, set } from "firebase/database"
+import { useRouter } from "next/navigation"
 
 interface House {
   id: string
@@ -40,6 +41,7 @@ function getAmenityIcon(amenity: string) {
 
 export function HouseCard({ house }: { house: House }) {
   const user = getCurrentUser()
+  const router = useRouter()
 
   useEffect(() => {
     if (user) {
@@ -117,16 +119,22 @@ export function HouseCard({ house }: { house: House }) {
           )}
         </div>
 
-        <Link href={`/house/${house.id}`} legacyBehavior>
-          <Button
-            className="w-full bg-gradient-to-r from-houselook-cyan to-houselook-blue text-white hover:shadow-xl transition-all duration-300 hover:scale-[1.02] font-semibold py-2 text-sm group-hover:shadow-2xl"
-          >
-            <span className="flex items-center justify-center">
-              View Details
-              <Eye className="ml-2 w-3 h-3 group-hover:translate-x-1 transition-transform" />
-            </span>
-          </Button>
-        </Link>
+        <Button
+          onClick={() => {
+            if (!user) {
+              localStorage.setItem("redirectAfterLogin", `/house/${house.id}`)
+              router.push("/login?message=house-details")
+            } else {
+              router.push(`/house/${house.id}`)
+            }
+          }}
+          className="w-full bg-gradient-to-r from-houselook-cyan to-houselook-blue text-white hover:shadow-xl transition-all duration-300 hover:scale-[1.02] font-semibold py-2 text-sm group-hover:shadow-2xl"
+        >
+          <span className="flex items-center justify-center">
+            View Details
+            <Eye className="ml-2 w-3 h-3 group-hover:translate-x-1 transition-transform" />
+          </span>
+        </Button>
       </div>
       
       {/* Removed Save Notification */}
