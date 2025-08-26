@@ -326,11 +326,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
                 </div>
 
                 <div className="absolute top-4 left-4">
-                  <Badge
-                    className={`text-white text-sm py-1 px-3 ${house.available ? "bg-green-600/90" : "bg-red-600/90"}`}
-                  >
-                    {house.available ? "Available" : "Occupied"}
-                  </Badge>
+                  
                 </div>
               </div>
 
