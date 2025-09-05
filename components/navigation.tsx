@@ -109,9 +109,11 @@ export function Navigation() {
           {/* Auth Buttons */}
           <div className="hidden md:flex items-center space-x-3" style={{ pointerEvents: 'auto' }}>
             {isAuthenticated ? (
-              <Link href="/list-property">
-                <Button className="bg-transparent text-houselook-indigo font-bold px-5 py-2 rounded-lg transition-all duration-200" style={{ fontFamily: 'Brush Script MT, cursive', boxShadow: 'none' }}>List Property</Button>
-              </Link>
+              user && user.isAdmin ? (
+                <Link href="/list-property">
+                  <Button className="bg-transparent text-houselook-indigo font-bold px-5 py-2 rounded-lg transition-all duration-200" style={{ fontFamily: 'Brush Script MT, cursive', boxShadow: 'none' }}>List Property</Button>
+                </Link>
+              ) : null
             ) : (
               <>
                 <Link href="/login">
@@ -145,9 +147,11 @@ export function Navigation() {
               )
             ) : null}
             {isAuthenticated ? (
-              <Link href="/list-property" className="w-full" onClick={() => setIsOpen(false)}>
-                <Button className="w-full bg-transparent text-houselook-indigo font-bold py-2 rounded-lg transition-all duration-200" style={{ fontFamily: 'Brush Script MT, cursive', boxShadow: 'none' }}>List Property</Button>
-              </Link>
+              user && user.isAdmin ? (
+                <Link href="/list-property" className="w-full" onClick={() => setIsOpen(false)}>
+                  <Button className="w-full bg-transparent text-houselook-indigo font-bold py-2 rounded-lg transition-all duration-200" style={{ fontFamily: 'Brush Script MT, cursive', boxShadow: 'none' }}>List Property</Button>
+                </Link>
+              ) : null
             ) : (
               <>
                 <Link href="/login" className="w-full" onClick={() => setIsOpen(false)}>

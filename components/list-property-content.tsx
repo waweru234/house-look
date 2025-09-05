@@ -1,75 +1,235 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Phone, Mail, MessageCircle, CheckCircle, Send } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { CheckCircle, AlertCircle, Send } from "lucide-react"
 import { getDatabase, ref, push, set } from "firebase/database"
 import { getCurrentUser } from "@/lib/auth"
 
 export function ListPropertyContent() {
-  const [formData, setFormData] = useState({
-    fullName: "",
-    contact: "",
-  })
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string>("")
+  
+  const [geoLoading, setGeoLoading] = useState(false)
+  const [geocodeLoading, setGeocodeLoading] = useState(false)
+  const [geocodeMessage, setGeocodeMessage] = useState<string>("")
+
+  const [formData, setFormData] = useState({
+    propertyName: "",
+    propertyCategory: "flat", // flat | shop | house | office
+    unitType: "bedsitter", // bedsitter | single-room | one-bedroom | two-bedroom | three-bedroom | studio | other
+    rentAmount: "",
+    depositAmount: "",
+    furnishedStatus: "unfurnished", // furnished | semi-furnished | unfurnished
+    amenitiesCsv: "", // comma separated
+    county: "",
+    subCounty: "",
+    town: "",
+    address: "",
+    latitude: "",
+    longitude: "",
+    description: "",
+    directions: "",
+    agentName: "",
+    agentPhone: "",
+  })
+
+  // Compute amenities array from CSV
+  const amenitiesArray = useMemo(() => {
+    return formData.amenitiesCsv
+      .split(",")
+      .map((a) => a.trim())
+      .filter(Boolean)
+  }, [formData.amenitiesCsv])
+
+  useEffect(() => {
+    const user = getCurrentUser()
+    if (!user) {
+      setIsAdmin(false)
+      return
+    }
+    setIsAdmin(!!user.isAdmin)
+  }, [])
+
+  const updateField = (field: keyof typeof formData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSubmitting(true)
+    setErrorMessage("")
 
+    if (!isAdmin) {
+      setErrorMessage("Access denied. Admins only.")
+      return
+    }
+
+    // Basic validation
+    if (!formData.propertyName || !formData.rentAmount || !formData.agentPhone || !formData.agentName) {
+      setErrorMessage("Please fill in required fields: Property name, Rent, Agent name and phone.")
+      return
+    }
+
+    setIsSubmitting(true)
     try {
-      const user = getCurrentUser()
       const db = getDatabase()
-      
-      // Create a unique ID for the listing request
-      const listingRef = ref(db, 'propertyRequests')
-      const newListingRef = push(listingRef)
-      
-      // Prepare the listing data
-      const listingData = {
-        id: newListingRef.key,
-        fullName: formData.fullName,
-        contact: formData.contact,
-        userId: user?.uid || 'anonymous',
-        userEmail: user?.email || 'anonymous',
-        status: 'pending',
-        submittedAt: new Date().toISOString(),
-        contacted: false,
-        notes: '',
-        propertyDetails: {
-          title: '',
-          location: '',
-          price: 0,
-          type: '',
-          bedrooms: '',
-          description: ''
-        }
+      const propertyRef = ref(db, "property")
+      const newRef = push(propertyRef)
+      const user = getCurrentUser()
+
+      const payload = {
+        id: newRef.key,
+        name: formData.propertyName,
+        propertyCategory: formData.propertyCategory,
+        unitType: formData.unitType,
+        price: Number(formData.rentAmount) || 0,
+        deposit: Number(formData.depositAmount) || 0,
+        furnishedStatus: formData.furnishedStatus,
+        amenities: amenitiesArray,
+        location: {
+          county: formData.county,
+          subCounty: formData.subCounty,
+          town: formData.town,
+          address: formData.address,
+          lat: Number(formData.latitude) || null,
+          lng: Number(formData.longitude) || null,
+        },
+        description: formData.description,
+        directions: formData.directions,
+        agent: {
+          name: formData.agentName,
+          phone: formData.agentPhone,
+        },
+        available: true,
+        createdAt: new Date().toISOString(),
+        createdBy: user?.uid || "admin",
       }
 
-      // Save to Firebase
-      await set(newListingRef, listingData)
+      await set(newRef, payload)
 
-      setIsSubmitting(false)
       setShowSuccess(true)
-
-      // Reset form after success
+      setIsSubmitting(false)
+      // Reset after a short delay
       setTimeout(() => {
         setShowSuccess(false)
         setFormData({
-          fullName: "",
-          contact: "",
+          propertyName: "",
+          propertyCategory: "flat",
+          unitType: "bedsitter",
+          rentAmount: "",
+          depositAmount: "",
+          furnishedStatus: "unfurnished",
+          amenitiesCsv: "",
+          county: "",
+          subCounty: "",
+          town: "",
+          address: "",
+          latitude: "",
+          longitude: "",
+          description: "",
+          directions: "",
+          agentName: "",
+          agentPhone: "",
         })
-      }, 4000)
-    } catch (error) {
-      console.error('Error submitting listing request:', error)
+      }, 2500)
+    } catch (err) {
+      console.error("Error saving property:", err)
       setIsSubmitting(false)
-      alert('Failed to submit your request. Please try again.')
+      setErrorMessage("Failed to save property. Please try again.")
     }
+  }
+
+  const useMyLocation = () => {
+    setGeocodeMessage("")
+    if (!("geolocation" in navigator)) {
+      setGeocodeMessage("Geolocation not supported by this browser.")
+      return
+    }
+    setGeoLoading(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords
+        setFormData((prev) => ({
+          ...prev,
+          latitude: String(latitude),
+          longitude: String(longitude),
+        }))
+        setGeoLoading(false)
+        setGeocodeMessage("Location detected and applied.")
+      },
+      (err) => {
+        setGeoLoading(false)
+        setGeocodeMessage(err.message || "Failed to get device location.")
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
+  }
+
+  const geocodeAddress = async () => {
+    setGeocodeMessage("")
+    const parts = [formData.address, formData.town, formData.subCounty, formData.county, "Kenya"]
+      .map((p) => (p || "").trim())
+      .filter(Boolean)
+    if (parts.length === 0) {
+      setGeocodeMessage("Enter address/town/county to geocode.")
+      return
+    }
+    const q = encodeURIComponent(parts.join(", "))
+    setGeocodeLoading(true)
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`, {
+        headers: { "Accept": "application/json" }
+      })
+      if (!res.ok) throw new Error("Geocoding request failed")
+      const data: Array<{ lat: string; lon: string; display_name?: string }> = await res.json()
+      if (Array.isArray(data) && data.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          latitude: data[0].lat,
+          longitude: data[0].lon,
+        }))
+        setGeocodeMessage("Address geocoded successfully.")
+      } else {
+        setGeocodeMessage("No results found for the provided address.")
+      }
+    } catch (e: any) {
+      setGeocodeMessage(e?.message || "Failed to geocode address.")
+    } finally {
+      setGeocodeLoading(false)
+    }
+  }
+
+  if (isAdmin === null) {
+    return (
+      <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
+        <p className="text-houselook-darkGray">Checking permissions…</p>
+      </div>
+    )
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-houselook-aliceblue via-houselook-white to-houselook-whitesmoke pt-24 pb-12">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Card className="border-0 shadow-soft-xl bg-houselook-white rounded-2xl">
+            <CardContent className="p-10 text-center">
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8 text-red-500" />
+              </div>
+              <h1 className="text-2xl font-black text-houselook-black mb-2">Access Denied</h1>
+              <p className="text-houselook-darkGray">Only admins can list properties.</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
   }
 
   if (showSuccess) {
@@ -81,20 +241,10 @@ export function ListPropertyContent() {
               <div className="w-20 h-20 bg-houselook-success/10 rounded-full flex items-center justify-center mx-auto mb-6">
                 <CheckCircle className="w-10 h-10 text-houselook-success" />
               </div>
-              <h1 className="text-3xl font-black text-houselook-black mb-4 font-heading">Thank You! 🎉</h1>
-              <p className="text-lg text-houselook-darkGray mb-6">
-                We've received your property listing request. Our team will contact you within one hour!
-              </p>
-              <div className="bg-houselook-success/5 border border-houselook-success/20 rounded-xl p-4 mb-6">
-                <p className="text-houselook-success font-semibold text-sm">
-                  ✅ Your details have been submitted successfully
-                </p>
-              </div>
-              <Button
-                onClick={() => (window.location.href = "/")}
-                className="bg-houselook-cyan hover:bg-houselook-teal text-houselook-black font-bold px-8 py-3 rounded-lg shadow-soft hover:shadow-cyan-glow transition-all duration-300"
-              >
-                Return to Home
+              <h1 className="text-3xl font-black text-houselook-black mb-4">Property Listed!</h1>
+              <p className="text-lg text-houselook-darkGray mb-6">Your property has been saved successfully.</p>
+              <Button onClick={() => (window.location.href = "/listings")} className="bg-houselook-cyan hover:bg-houselook-teal text-houselook-black font-bold px-8 py-3 rounded-lg shadow-soft transition-all duration-300">
+                Go to Listings
               </Button>
             </CardContent>
           </Card>
@@ -105,195 +255,183 @@ export function ListPropertyContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-houselook-aliceblue via-houselook-white to-houselook-whitesmoke pt-24 pb-12">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-black text-houselook-black mb-6 font-heading">
-            List Your Property on <span className="text-houselook-cyan">HouseLook</span>
-          </h1>
-          <p className="text-xl text-houselook-darkGray max-w-2xl mx-auto font-medium">
-            Join thousands of property owners who trust HouseLook to showcase their properties
-          </p>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-10">
+          <h1 className="text-4xl md:text-5xl font-black text-houselook-black mb-3">Admin: List Property</h1>
+          <p className="text-houselook-darkGray">Fill all the details below. Fields marked with * are required.</p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Instructions Section */}
-          <div className="lg:col-span-1">
-            <Card className="border-0 shadow-soft-lg bg-houselook-white rounded-2xl mb-6">
-              <CardHeader className="bg-gradient-to-r from-houselook-cyan to-houselook-teal text-houselook-black rounded-t-2xl">
-                <CardTitle className="text-xl font-black font-heading">📋 How It Works</CardTitle>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="space-y-4">
-                  <p className="text-houselook-darkGray font-medium leading-relaxed">
-                    To list your property on HouseLook, please provide your full name and an active phone number or
-                    email address. We will contact you within <strong className="text-houselook-black">one hour</strong>{" "}
-                    after receiving your details.
-                  </p>
+        <Card className="border-0 shadow-soft-xl bg-houselook-white rounded-2xl">
+          <CardHeader className="bg-gradient-to-r from-houselook-black to-houselook-darkGray text-houselook-white rounded-t-2xl">
+            <CardTitle className="text-2xl font-black">Property Details</CardTitle>
+          </CardHeader>
+          <CardContent className="p-8">
+            {errorMessage && (
+              <div className="mb-6 p-4 rounded-lg bg-red-50 text-red-700 border border-red-200">
+                {errorMessage}
+              </div>
+            )}
 
-                  <div className="bg-houselook-aliceblue rounded-xl p-4">
-                    <h3 className="font-bold text-houselook-black mb-3">📞 Contact Us Directly:</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-houselook-info/10 rounded-lg flex items-center justify-center">
-                          <Mail className="w-4 h-4 text-houselook-info" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-houselook-black text-sm">Email</p>
-                          <p className="text-houselook-darkGray text-sm">info@houselook.co.ke</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-houselook-success/10 rounded-lg flex items-center justify-center">
-                          <Phone className="w-4 h-4 text-houselook-success" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-houselook-black text-sm">Phone & WhatsApp</p>
-                          <p className="text-houselook-darkGray text-sm">0793779647</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button
-                    onClick={() =>
-                      window.open(
-                        "https://wa.me/254793779647?text=Hi, I want to list my property on HouseLook",
-                        "_blank",
-                      )
-                    }
-                    className="w-full bg-houselook-success hover:bg-houselook-success/90 text-houselook-white font-bold py-3 rounded-lg shadow-soft transition-all duration-300"
-                  >
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    WhatsApp Us Now
-                  </Button>
+            <form onSubmit={handleSubmit} className="space-y-8">
+              {/* Basic info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="propertyName" className="font-bold">Property Name *</Label>
+                  <Input id="propertyName" value={formData.propertyName} onChange={(e) => updateField("propertyName", e.target.value)} placeholder="e.g., Sunrise Apartments" required />
                 </div>
-              </CardContent>
-            </Card>
 
-            {/* Benefits */}
-            <Card className="border-0 shadow-soft-lg bg-houselook-white rounded-2xl">
-              <CardHeader className="bg-gradient-to-r from-houselook-indigo to-houselook-cyan text-houselook-white rounded-t-2xl">
-                <CardTitle className="text-lg font-black font-heading">✨ Why Choose HouseLook?</CardTitle>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-2 h-2 bg-houselook-cyan rounded-full"></div>
-                    <span className="text-houselook-darkGray font-medium text-sm">Fast response within 1 hour</span>
+                <div className="space-y-2">
+                  <Label className="font-bold">Property Category</Label>
+                  <Select value={formData.propertyCategory} onValueChange={(v) => updateField("propertyCategory", v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="flat">Flat</SelectItem>
+                      <SelectItem value="shop">Shop</SelectItem>
+                      <SelectItem value="house">House</SelectItem>
+                      <SelectItem value="office">Office</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="font-bold">Unit Type</Label>
+                  <Select value={formData.unitType} onValueChange={(v) => updateField("unitType", v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select unit type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bedsitter">Bedsitter</SelectItem>
+                      <SelectItem value="single-room">Single Room</SelectItem>
+                      <SelectItem value="one-bedroom">One Bedroom</SelectItem>
+                      <SelectItem value="two-bedroom">Two Bedroom</SelectItem>
+                      <SelectItem value="three-bedroom">Three Bedroom</SelectItem>
+                      <SelectItem value="studio">Studio</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="furnishedStatus" className="font-bold">Furnished Status</Label>
+                  <Select value={formData.furnishedStatus} onValueChange={(v) => updateField("furnishedStatus", v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="furnished">Furnished</SelectItem>
+                      <SelectItem value="semi-furnished">Semi-furnished</SelectItem>
+                      <SelectItem value="unfurnished">Unfurnished</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="rentAmount" className="font-bold">Monthly Rent (KSh) *</Label>
+                  <Input id="rentAmount" type="number" inputMode="numeric" value={formData.rentAmount} onChange={(e) => updateField("rentAmount", e.target.value)} placeholder="e.g., 15000" required />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="depositAmount" className="font-bold">Deposit (KSh)</Label>
+                  <Input id="depositAmount" type="number" inputMode="numeric" value={formData.depositAmount} onChange={(e) => updateField("depositAmount", e.target.value)} placeholder="e.g., 15000" />
+                </div>
+              </div>
+
+              {/* Amenities */}
+              <div className="space-y-2">
+                <Label htmlFor="amenitiesCsv" className="font-bold">Amenities (comma separated)</Label>
+                <Input id="amenitiesCsv" value={formData.amenitiesCsv} onChange={(e) => updateField("amenitiesCsv", e.target.value)} placeholder="e.g., Wi-Fi, Parking, Security, Water" />
+                {amenitiesArray.length > 0 && (
+                  <p className="text-sm text-houselook-darkGray">Parsed: {amenitiesArray.join(", ")}</p>
+                )}
+              </div>
+
+              {/* Location */}
+              <div>
+                <h3 className="font-bold mb-3 text-houselook-black">Location</h3>
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <Button type="button" onClick={useMyLocation} disabled={geoLoading} className="bg-houselook-cyan hover:bg-houselook-teal text-houselook-black">
+                    {geoLoading ? "Detecting..." : "Use My Location"}
+                  </Button>
+                  <Button type="button" onClick={geocodeAddress} disabled={geocodeLoading} className="bg-houselook-indigo hover:bg-houselook-cyan text-white">
+                    {geocodeLoading ? "Geocoding..." : "Geocode Address"}
+                  </Button>
+                  {geocodeMessage && (
+                    <span className="text-sm text-houselook-darkGray">{geocodeMessage}</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="county" className="font-bold">County</Label>
+                    <Input id="county" value={formData.county} onChange={(e) => updateField("county", e.target.value)} placeholder="e.g., Nairobi" />
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-2 h-2 bg-houselook-teal rounded-full"></div>
-                    <span className="text-houselook-darkGray font-medium text-sm">Professional property photos</span>
+                  <div className="space-y-2">
+                    <Label htmlFor="subCounty" className="font-bold">Subcounty</Label>
+                    <Input id="subCounty" value={formData.subCounty} onChange={(e) => updateField("subCounty", e.target.value)} placeholder="e.g., Westlands" />
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-2 h-2 bg-houselook-indigo rounded-full"></div>
-                    <span className="text-houselook-darkGray font-medium text-sm">Large audience reach</span>
+                  <div className="space-y-2">
+                    <Label htmlFor="town" className="font-bold">Town</Label>
+                    <Input id="town" value={formData.town} onChange={(e) => updateField("town", e.target.value)} placeholder="e.g., Parklands" />
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-2 h-2 bg-houselook-success rounded-full"></div>
-                    <span className="text-houselook-darkGray font-medium text-sm">Verified listings only</span>
+                  <div className="space-y-2">
+                    <Label htmlFor="address" className="font-bold">Place / Address</Label>
+                    <Input id="address" value={formData.address} onChange={(e) => updateField("address", e.target.value)} placeholder="Street, Building, Landmarks" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="latitude" className="font-bold">Latitude</Label>
+                    <Input id="latitude" value={formData.latitude} onChange={(e) => updateField("latitude", e.target.value)} placeholder="-1.2921" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="longitude" className="font-bold">Longitude</Label>
+                    <Input id="longitude" value={formData.longitude} onChange={(e) => updateField("longitude", e.target.value)} placeholder="36.8219" />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
 
-          {/* Form Section */}
-          <div className="lg:col-span-2">
-            <Card className="border-0 shadow-soft-xl bg-houselook-white rounded-2xl">
-              <CardHeader className="bg-gradient-to-r from-houselook-black to-houselook-darkGray text-houselook-white rounded-t-2xl">
-                <CardTitle className="text-2xl font-black font-heading"> Quick Property Listing Form</CardTitle>
-                <p className="text-houselook-white/80 font-medium">
-                  Fill out your details and we'll contact you within one hour
-                </p>
-              </CardHeader>
-              <CardContent className="p-8">
-                <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Descriptions */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="description" className="font-bold">Description</Label>
+                  <textarea id="description" value={formData.description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateField("description", e.target.value)} placeholder="Describe the house, features, terms, etc." className="min-h-[120px] w-full border border-gray-300 rounded-md p-3" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="directions" className="font-bold">Directions</Label>
+                  <textarea id="directions" value={formData.directions} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateField("directions", e.target.value)} placeholder="How to get there from a known point" className="min-h-[120px] w-full border border-gray-300 rounded-md p-3" />
+                </div>
+              </div>
+
+              {/* Agent */}
+              <div>
+                <h3 className="font-bold mb-3 text-houselook-black">Agent Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="fullName" className="text-base font-bold text-houselook-black">
-                      Full Name *
-                    </Label>
-                    <Input
-                      id="fullName"
-                      value={formData.fullName}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, fullName: e.target.value }))}
-                      placeholder="Enter your full name"
-                      required
-                      className="border-2 border-houselook-coolGray/30 focus:border-houselook-cyan rounded-lg p-4 font-medium text-houselook-black placeholder:text-houselook-coolGray"
-                    />
+                    <Label htmlFor="agentName" className="font-bold">Agent Name *</Label>
+                    <Input id="agentName" value={formData.agentName} onChange={(e) => updateField("agentName", e.target.value)} placeholder="e.g., Jane Doe" required />
                   </div>
-
                   <div className="space-y-2">
-                    <Label htmlFor="contact" className="text-base font-bold text-houselook-black">
-                      Active Phone Number or Email Address *
-                    </Label>
-                    <Input
-                      id="contact"
-                      value={formData.contact}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, contact: e.target.value }))}
-                      placeholder="0700123456 or your.email@example.com"
-                      required
-                      className="border-2 border-houselook-coolGray/30 focus:border-houselook-cyan rounded-lg p-4 font-medium text-houselook-black placeholder:text-houselook-coolGray"
-                    />
-                    <p className="text-sm text-houselook-coolGray">We'll use this to contact you within one hour</p>
+                    <Label htmlFor="agentPhone" className="font-bold">Agent Phone *</Label>
+                    <Input id="agentPhone" value={formData.agentPhone} onChange={(e) => updateField("agentPhone", e.target.value)} placeholder="e.g., +2547XXXXXXXX" required />
                   </div>
+                </div>
+              </div>
 
-                  <div className="bg-houselook-aliceblue rounded-xl p-6">
-                    <h3 className="font-bold text-houselook-black mb-3">📞 What happens next?</h3>
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-6 h-6 bg-houselook-cyan text-houselook-black rounded-full flex items-center justify-center font-bold text-xs">
-                          1
-                        </div>
-                        <span className="text-houselook-darkGray font-medium text-sm">
-                          We contact you within 1 hour
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="w-6 h-6 bg-houselook-teal text-houselook-white rounded-full flex items-center justify-center font-bold text-xs">
-                          2
-                        </div>
-                        <span className="text-houselook-darkGray font-medium text-sm">
-                          Schedule property visit & photos
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="w-6 h-6 bg-houselook-indigo text-houselook-white rounded-full flex items-center justify-center font-bold text-xs">
-                          3
-                        </div>
-                        <span className="text-houselook-darkGray font-medium text-sm">Your property goes live</span>
-                      </div>
-                    </div>
+              <Button type="submit" disabled={isSubmitting} className="w-full bg-houselook-cyan hover:bg-houselook-teal text-houselook-black font-black text-lg py-4 rounded-lg shadow-soft transition-all duration-300 hover:scale-105">
+                {isSubmitting ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-houselook-black mr-3"></div>
+                    Saving...
                   </div>
-
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full bg-houselook-cyan hover:bg-houselook-teal text-houselook-black font-black text-lg py-4 rounded-lg shadow-soft hover:shadow-cyan-glow transition-all duration-300 hover:scale-105"
-                  >
-                    {isSubmitting ? (
-                      <div className="flex items-center">
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-houselook-black mr-3"></div>
-                        Submitting...
-                      </div>
-                    ) : (
-                      <div className="flex items-center">
-                        <Send className="w-5 h-5 mr-3" />
-                        Submit My Details - FREE
-                      </div>
-                    )}
-                  </Button>
-
-                  <p className="text-center text-sm text-houselook-coolGray">
-                    By submitting, you agree to our Terms of Service and Privacy Policy
-                  </p>
-                </form>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+                ) : (
+                  <div className="flex items-center">
+                    <Send className="w-5 h-5 mr-3" />
+                    Save Property
+                  </div>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

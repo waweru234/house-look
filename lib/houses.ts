@@ -109,22 +109,54 @@ export async function getAdminStatistics() {
 
 // Real-time listener for admin statistics
 export function subscribeToAdminStats(callback: (stats: any) => void) {
-  const statsRef = ref(db, 'statistics')
-  
-  const unsubscribe = onValue(statsRef, (snapshot) => {
-    if (snapshot.exists()) {
-      callback(snapshot.val())
-    } else {
-      // If no statistics node exists, compute from other data
-      getAdminStatistics().then(callback)
+  const usersRef = ref(db, 'users')
+  const propertyRef = ref(db, 'property')
+  const transactionsRef = ref(db, 'transactions')
+
+  let latestUsers: any = null
+  let latestProperties: any = null
+  let latestTransactions: any = null
+
+  const recompute = () => {
+    try {
+      const totalUsers = latestUsers ? Object.keys(latestUsers).length : 0
+      const totalProperties = latestProperties ? Object.keys(latestProperties).length : 0
+      let totalRevenue = 0
+      if (latestTransactions) {
+        totalRevenue = Object.values(latestTransactions).reduce((sum: number, t: any) => sum + (Number((t as any).amount) || 0), 0)
+      }
+      callback({ totalUsers, totalProperties, totalRevenue })
+    } catch (err) {
+      console.error('Error recomputing admin stats:', err)
     }
+  }
+
+  const usersUnsub = onValue(usersRef, (snapshot) => {
+    latestUsers = snapshot.exists() ? snapshot.val() : null
+    recompute()
   }, (error) => {
-    console.error('Error listening to admin stats:', error)
-    // Fallback to computed stats
-    getAdminStatistics().then(callback)
+    console.error('Error listening to users:', error)
+  })
+
+  const propsUnsub = onValue(propertyRef, (snapshot) => {
+    latestProperties = snapshot.exists() ? snapshot.val() : null
+    recompute()
+  }, (error) => {
+    console.error('Error listening to properties:', error)
+  })
+
+  const txUnsub = onValue(transactionsRef, (snapshot) => {
+    latestTransactions = snapshot.exists() ? snapshot.val() : null
+    recompute()
+  }, (error) => {
+    console.error('Error listening to transactions:', error)
   })
   
-  return unsubscribe
+  return () => {
+    try { usersUnsub() } catch {}
+    try { propsUnsub() } catch {}
+    try { txUnsub() } catch {}
+  }
 }
 
 // Get detailed user analytics
@@ -151,16 +183,22 @@ export async function getUserAnalytics() {
       'Inactive': 0
     }
 
-    // Registration trends (last 12 months)
+    // Registration trends (last 12 months) using createdAt timestamps
     const now = new Date()
-    const registrationTrends = Array.from({ length: 12 }, (_, i) => {
-      const month = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      return {
-        month: month.toLocaleDateString('en-US', { month: 'short' }),
+    const currentYearMonth = now.getFullYear() * 12 + now.getMonth() // 0-based month
+
+    // Build last 12 months buckets as map key "YYYY-MM"
+    const makeKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    const monthLabels: { [key: string]: { month: string; users: number; revenue: number } } = {}
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const key = makeKey(d)
+      monthLabels[key] = {
+        month: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
         users: 0,
         revenue: 0
       }
-    }).reverse()
+    }
 
     // Top users by points
     const topUsers = userEntries
@@ -178,13 +216,16 @@ export async function getUserAnalytics() {
 
     // Calculate user types and registration trends
     userEntries.forEach(([id, user]: [string, any]) => {
-      const joinDate = user.createdAt || user.joinedAt
-      if (joinDate) {
-        const joinMonth = new Date(joinDate).getMonth()
-        const currentMonth = now.getMonth()
-        const monthIndex = currentMonth - joinMonth
-        if (monthIndex >= 0 && monthIndex < 12) {
-          registrationTrends[monthIndex].users++
+      const createdAt = user.createdAt || user.joinedAt
+      if (createdAt) {
+        const createdDate = new Date(createdAt)
+        if (!isNaN(createdDate.getTime())) {
+          const ym = createdDate.getFullYear() * 12 + createdDate.getMonth()
+          const diff = currentYearMonth - ym
+          if (diff >= 0 && diff < 12) {
+            const key = makeKey(new Date(createdDate.getFullYear(), createdDate.getMonth(), 1))
+            if (monthLabels[key]) monthLabels[key].users++
+          }
         }
       }
 
@@ -202,7 +243,7 @@ export async function getUserAnalytics() {
 
     return {
       userTypes: Object.entries(userTypes).map(([name, value]) => ({ name, value })),
-      registrationTrends,
+      registrationTrends: Object.values(monthLabels),
       topUsers
     }
   } catch (error) {
@@ -235,11 +276,10 @@ export async function getPropertyAnalytics() {
     const propertyTypes: { [key: string]: number } = {}
     const locationDistribution: { [key: string]: number } = {}
     const priceRanges = {
-      'Under 50K': 0,
-      '50K - 100K': 0,
-      '100K - 200K': 0,
-      '200K - 500K': 0,
-      'Over 500K': 0
+      'Under 5K': 0,
+      '5K - 10K': 0,
+      '10K - 20K': 0,
+      'Over 20K': 0
     }
 
     propertyEntries.forEach(([id, property]: [string, any]) => {
@@ -248,16 +288,16 @@ export async function getPropertyAnalytics() {
       propertyTypes[type] = (propertyTypes[type] || 0) + 1
 
       // Location distribution
-      const location = property.location || property.area || 'Unknown'
-      locationDistribution[location] = (locationDistribution[location] || 0) + 1
+      const location = property.location?.town || property.location?.county || property.location || property.area || 'Unknown'
+      const locationKey = typeof location === 'string' ? location : 'Unknown'
+      locationDistribution[locationKey] = (locationDistribution[locationKey] || 0) + 1
 
-      // Price ranges
+      // Price ranges (rent per month)
       const price = Number(property.price) || 0
-      if (price < 50000) priceRanges['Under 50K']++
-      else if (price < 100000) priceRanges['50K - 100K']++
-      else if (price < 200000) priceRanges['100K - 200K']++
-      else if (price < 500000) priceRanges['200K - 500K']++
-      else priceRanges['Over 500K']++
+      if (price < 5000) priceRanges['Under 5K']++
+      else if (price < 10000) priceRanges['5K - 10K']++
+      else if (price <= 20000) priceRanges['10K - 20K']++
+      else priceRanges['Over 20K']++
     })
 
     return {
@@ -364,16 +404,19 @@ export async function getRevenueAnalytics() {
 // Get real-time statistics
 export async function getRealTimeStats() {
   try {
-    // Get active sessions (users who have been active in the last 30 minutes)
-    const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000)
-    const activeUsersQuery = query(
-      ref(db, 'users'),
-      orderByChild('lastActive'),
-      startAt(thirtyMinutesAgo)
-    )
-    
-    const activeUsersSnap = await get(activeUsersQuery)
-    const activeSessions = activeUsersSnap.exists() ? Object.keys(activeUsersSnap.val()).length : 0
+    // Count users active in the last 30 minutes without relying on indexed queries
+    const usersSnap = await get(ref(db, 'users'))
+    let activeSessions = 0
+    if (usersSnap.exists()) {
+      const users = usersSnap.val()
+      const now = Date.now()
+      const thirtyMinutesAgo = now - (30 * 60 * 1000)
+      Object.values(users).forEach((u: any) => {
+        if (u && typeof u.lastActive === 'number' && u.lastActive >= thirtyMinutesAgo) {
+          activeSessions++
+        }
+      })
+    }
 
     return {
       activeSessions,
@@ -390,25 +433,30 @@ export async function getRealTimeStats() {
 
 // Real-time listener for active sessions
 export function subscribeToActiveSessions(callback: (stats: any) => void) {
-  const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000)
-  const activeUsersQuery = query(
-    ref(db, 'users'),
-    orderByChild('lastActive'),
-    startAt(thirtyMinutesAgo)
-  )
+  const usersRef = ref(db, 'users')
   
-  const unsubscribe = onValue(activeUsersQuery, (snapshot) => {
-    const activeSessions = snapshot.exists() ? Object.keys(snapshot.val()).length : 0
-    callback({
-      activeSessions,
-      currentTime: new Date().toISOString()
-    })
+  const unsubscribe = onValue(usersRef, (snapshot) => {
+    try {
+      const users = snapshot.exists() ? snapshot.val() : {}
+      const now = Date.now()
+      const thirtyMinutesAgo = now - (30 * 60 * 1000)
+      let active = 0
+      Object.values(users).forEach((u: any) => {
+        if (u && typeof u.lastActive === 'number' && u.lastActive >= thirtyMinutesAgo) {
+          active++
+        }
+      })
+      callback({
+        activeSessions: active,
+        currentTime: new Date().toISOString()
+      })
+    } catch (err) {
+      console.error('Error computing active sessions:', err)
+      callback({ activeSessions: 0, currentTime: new Date().toISOString() })
+    }
   }, (error) => {
-    console.error('Error listening to active sessions:', error)
-    callback({
-      activeSessions: 0,
-      currentTime: new Date().toISOString()
-    })
+    console.error('Error listening to users for active sessions:', error)
+    callback({ activeSessions: 0, currentTime: new Date().toISOString() })
   })
   
   return unsubscribe
