@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -64,6 +64,21 @@ export function HouseDetails({ house }: HouseDetailsProps) {
 
   const router = useRouter()
 
+  const images = useMemo(() => {
+    if (Array.isArray((house as any).images) && (house as any).images.length > 0) {
+      return (house as any).images as string[]
+    }
+    const urls: string[] = []
+    for (let i = 1; i <= 10; i++) {
+      const key = `image${i}Url`
+      const val = (house as any)[key]
+      if (typeof val === 'string' && val.trim().length > 0) {
+        urls.push(val)
+      }
+    }
+    return urls
+  }, [house])
+
   useEffect(() => {
     setIsClient(true)
   }, [])
@@ -115,11 +130,11 @@ export function HouseDetails({ house }: HouseDetailsProps) {
   }
 
   const nextImage = () => {
-    setCurrentImageIndex((prev) => (prev === house.images.length - 1 ? 0 : prev + 1))
+    setCurrentImageIndex((prev) => (images.length === 0 ? 0 : (prev === images.length - 1 ? 0 : prev + 1)))
   }
 
   const prevImage = () => {
-    setCurrentImageIndex((prev) => (prev === 0 ? house.images.length - 1 : prev - 1))
+    setCurrentImageIndex((prev) => (images.length === 0 ? 0 : (prev === 0 ? images.length - 1 : prev - 1)))
   }
 
   const getAmenityIcon = (amenity: string) => {
@@ -272,7 +287,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
             <section className="mb-8">
               <div className="relative h-96 md:h-[550px] rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-shadow duration-300 cursor-pointer group">
                 <Image
-                  src={house.images[currentImageIndex] || "/placeholder.svg"}
+                  src={(images[currentImageIndex] || "/placeholder.svg")}
                   alt={house.title}
                   fill
                   className="object-cover transition-transform duration-500 group-hover:scale-105"
@@ -280,7 +295,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
 
-                {house.images.length > 1 && (
+                {images.length > 1 && (
                   <>
                     <Button
                       variant="secondary"
@@ -331,9 +346,9 @@ export function HouseDetails({ house }: HouseDetailsProps) {
               </div>
 
               {/* Image Thumbnails */}
-              {house.images.length > 1 && (
+              {images.length > 1 && (
                 <div className="flex gap-3 mt-4 overflow-x-auto pb-2">
-                  {house.images.map((image, index) => (
+                  {images.map((image, index) => (
                     <button
                       key={index}
                       onClick={() => setCurrentImageIndex(index)}
@@ -552,7 +567,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
         >
           <div className="relative w-full h-full max-w-5xl max-h-[90vh]">
             <Image
-              src={house.images[currentImageIndex] || "/placeholder.svg"}
+              src={(images[currentImageIndex] || "/placeholder.svg")}
               alt={house.title}
               fill
               className="object-contain"
