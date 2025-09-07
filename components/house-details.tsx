@@ -73,33 +73,42 @@ export function HouseDetails({ house }: HouseDetailsProps) {
     // Collect keys like image1Url, image2url, IMAGE3URL, image4, img5, photo6, etc.
     const urls: Array<{ idx: number; url: string }> = []
     const anyHouse = house as any
-    const keys = Object.keys(anyHouse || {})
 
-    // Primary pattern: image<number>(url)? (case-insensitive)
-    keys.forEach((key) => {
-      const match = key.match(/^image\s*(\d+)\s*(?:url)?$/i)
-      if (match) {
-        const idx = Number(match[1])
-        const val = anyHouse[key]
-        if (typeof val === 'string' && val.trim().length > 0) {
-          urls.push({ idx, url: val })
+    const collectFromObject = (obj: any) => {
+      if (!obj || typeof obj !== 'object') return
+      const keys = Object.keys(obj)
+      // Primary pattern: image<number>(url)? (case-insensitive)
+      keys.forEach((key) => {
+        const match = key.match(/^image\s*(\d+)\s*(?:url)?$/i)
+        if (match) {
+          const idx = Number(match[1])
+          const val = obj[key]
+          if (typeof val === 'string' && val.trim().length > 0) {
+            urls.push({ idx, url: val })
+          }
         }
-      }
-    })
+      })
+      // Fallback common aliases: img<number>, photo<number>
+      keys.forEach((key) => {
+        const matchImg = key.match(/^img\s*(\d+)$/i)
+        const matchPhoto = key.match(/^photo\s*(\d+)$/i)
+        const matched = matchImg || matchPhoto
+        if (matched) {
+          const idx = Number(matched[1])
+          const val = obj[key]
+          if (typeof val === 'string' && val.trim().length > 0) {
+            urls.push({ idx, url: val })
+          }
+        }
+      })
+    }
 
-    // Fallback common aliases: img<number>, photo<number>
-    keys.forEach((key) => {
-      const matchImg = key.match(/^img\s*(\d+)$/i)
-      const matchPhoto = key.match(/^photo\s*(\d+)$/i)
-      const matched = matchImg || matchPhoto
-      if (matched) {
-        const idx = Number(matched[1])
-        const val = anyHouse[key]
-        if (typeof val === 'string' && val.trim().length > 0) {
-          urls.push({ idx, url: val })
-        }
-      }
-    })
+    // Scan top-level
+    collectFromObject(anyHouse)
+    // Also scan nested images object if present
+    if (anyHouse.images && typeof anyHouse.images === 'object' && !Array.isArray(anyHouse.images)) {
+      collectFromObject(anyHouse.images)
+    }
 
     // Sort by numeric index and return just URLs
     urls.sort((a, b) => a.idx - b.idx)
@@ -374,14 +383,15 @@ export function HouseDetails({ house }: HouseDetailsProps) {
 
               {/* Image Thumbnails */}
               {images.length > 1 && (
-                <div className="flex gap-3 mt-4 overflow-x-auto pb-2">
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
                   {images.map((image, index) => (
                     <button
                       key={index}
                       onClick={() => setCurrentImageIndex(index)}
-                      className={`relative w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 transition-all duration-200 ${
+                      className={`relative w-full h-24 rounded-lg overflow-hidden transition-all duration-200 ${
                         index === currentImageIndex ? "ring-4 ring-cyan-500 shadow-md" : "hover:opacity-90"
                       }`}
+                      aria-label={`View image ${index + 1}`}
                     >
                       <Image
                         src={image || "/placeholder.svg"}

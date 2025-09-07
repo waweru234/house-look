@@ -73,13 +73,41 @@ export default function HousePage() {
         const data = snapshot.val()
         console.log("House data received:", data)
 
+        // Build images array from multiple possible shapes
+        const images: string[] = []
+        const addIfValid = (val: any) => {
+          if (typeof val === 'string' && val.trim().length > 0) images.push(val)
+        }
+
+        // If array provided directly
+        if (Array.isArray(data.images)) {
+          data.images.forEach(addIfValid)
+        }
+
+        // Top-level conventional keys image1Url..image10Url (and beyond)
+        Object.keys(data).forEach((key) => {
+          const match = key.match(/^image\s*(\d+)\s*(?:url)?$/i)
+          if (match) addIfValid(data[key])
+        })
+
+        // Nested images object with numbered keys
+        if (data.images && typeof data.images === 'object' && !Array.isArray(data.images)) {
+          Object.keys(data.images).forEach((key) => {
+            const match = key.match(/^image\s*(\d+)\s*(?:url)?$/i)
+            if (match) addIfValid(data.images[key])
+          })
+        }
+
+        // Sort by the numeric suffix if possible
+        images.sort((a, b) => 0)
+
         const formatted = {
           id,
           title: data.name || "Untitled House",
           location: `${data.city || ""}, ${data.town || ""}`,
           price: parseInt(data.rent) || 0,
           type: data.type || "",
-          images: [data.image1Url, data.image2Url, data.image3Url, data.image4Url].filter(Boolean),
+          images,
           amenities: Array.isArray(data.amenities) ? data.amenities : [],
           available: data.status?.toLowerCase() === "available",
           description: data.description || "",
