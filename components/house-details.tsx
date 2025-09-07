@@ -65,18 +65,45 @@ export function HouseDetails({ house }: HouseDetailsProps) {
   const router = useRouter()
 
   const images = useMemo(() => {
+    // If images array provided, use it
     if (Array.isArray((house as any).images) && (house as any).images.length > 0) {
       return (house as any).images as string[]
     }
-    const urls: string[] = []
-    for (let i = 1; i <= 10; i++) {
-      const key = `image${i}Url`
-      const val = (house as any)[key]
-      if (typeof val === 'string' && val.trim().length > 0) {
-        urls.push(val)
+
+    // Collect keys like image1Url, image2url, IMAGE3URL, image4, img5, photo6, etc.
+    const urls: Array<{ idx: number; url: string }> = []
+    const anyHouse = house as any
+    const keys = Object.keys(anyHouse || {})
+
+    // Primary pattern: image<number>(url)? (case-insensitive)
+    keys.forEach((key) => {
+      const match = key.match(/^image\s*(\d+)\s*(?:url)?$/i)
+      if (match) {
+        const idx = Number(match[1])
+        const val = anyHouse[key]
+        if (typeof val === 'string' && val.trim().length > 0) {
+          urls.push({ idx, url: val })
+        }
       }
-    }
-    return urls
+    })
+
+    // Fallback common aliases: img<number>, photo<number>
+    keys.forEach((key) => {
+      const matchImg = key.match(/^img\s*(\d+)$/i)
+      const matchPhoto = key.match(/^photo\s*(\d+)$/i)
+      const matched = matchImg || matchPhoto
+      if (matched) {
+        const idx = Number(matched[1])
+        const val = anyHouse[key]
+        if (typeof val === 'string' && val.trim().length > 0) {
+          urls.push({ idx, url: val })
+        }
+      }
+    })
+
+    // Sort by numeric index and return just URLs
+    urls.sort((a, b) => a.idx - b.idx)
+    return urls.map((x) => x.url)
   }, [house])
 
   useEffect(() => {
