@@ -78,12 +78,33 @@ export function AdminDashboard() {
   const [revenueAnalytics, setRevenueAnalytics] = useState<any>(null)
   const [realTimeStats, setRealTimeStats] = useState<any>(null)
   const [propertyRequests, setPropertyRequests] = useState<any[]>([])
+  // Availability stats
+  const [availabilityStats, setAvailabilityStats] = useState<{ available: number; full: number; total: number }>({ available: 0, full: 0, total: 0 })
+  // Property growth (last 12 months)
+  const [propertyGrowth, setPropertyGrowth] = useState<Array<{ month: string; properties: number }>>([])
+  // Price ranges from rent
+  const [priceRanges, setPriceRanges] = useState<Array<{ name: string; value: number }>>([])
   
   // Loading states
   const [loadingStats, setLoadingStats] = useState(true)
   const [loadingAnalytics, setLoadingAnalytics] = useState(true)
   const [loadingRequests, setLoadingRequests] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Derived: Month-over-month user growth based on createdAt (registrationTrends)
+  const userMoMGrowth = (() => {
+    try {
+      const series = Array.isArray(userAnalytics?.registrationTrends) ? userAnalytics.registrationTrends : []
+      if (series.length < 2) return 0
+      const last = Number(series[series.length - 1]?.users || 0)
+      const prev = Number(series[series.length - 2]?.users || 0)
+      if (prev > 0) return ((last - prev) / prev) * 100
+      if (prev === 0 && last > 0) return 100
+      return 0
+    } catch {
+      return 0
+    }
+  })()
 
   useEffect(() => {
     setCurrentTime(new Date())
@@ -124,6 +145,9 @@ export function AdminDashboard() {
     // Initial load
     loadAllData()
     loadPropertyRequests()
+    loadAvailability()
+    loadPropertyGrowth()
+    loadPriceRanges()
     
     // Set up real-time listeners with error handling
     let unsubscribeStats: (() => void) | null = null
@@ -152,6 +176,9 @@ export function AdminDashboard() {
         setUserAnalytics(userData)
         setPropertyAnalytics(propertyData)
         setRevenueAnalytics(revenueData)
+        loadAvailability()
+        loadPropertyGrowth()
+        loadPriceRanges()
       }).catch(error => {
         console.error('Error refreshing analytics data:', error)
       })
@@ -163,6 +190,89 @@ export function AdminDashboard() {
       clearInterval(refreshInterval)
     }
   }, [])
+
+  const loadAvailability = async () => {
+    try {
+      const { getDatabase, ref, get } = await import('firebase/database')
+      const db = getDatabase()
+      const propsRef = ref(db, 'property')
+      const snap = await get(propsRef)
+      if (snap.exists()) {
+        const values = Object.values(snap.val() as Record<string, any>)
+        const available = values.reduce((n, p: any) => n + (p && p.available === true ? 1 : 0), 0)
+        const total = values.length
+        const full = total - available
+        setAvailabilityStats({ available, full, total })
+      } else {
+        setAvailabilityStats({ available: 0, full: 0, total: 0 })
+      }
+    } catch (e) {
+      console.error('Error loading availability stats:', e)
+    }
+  }
+
+  const loadPropertyGrowth = async () => {
+    try {
+      const { getDatabase, ref, get } = await import('firebase/database')
+      const db = getDatabase()
+      const propsRef = ref(db, 'property')
+      const snap = await get(propsRef)
+      const now = new Date()
+      // Build last 12 months buckets
+      const months: Array<{ key: string; month: string; properties: number }> = []
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        months.push({ key, month: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }), properties: 0 })
+      }
+      const keyToIdx = months.reduce((acc, m, idx) => { acc[m.key] = idx; return acc }, {} as Record<string, number>)
+      if (snap.exists()) {
+        const values = Object.values(snap.val() as Record<string, any>)
+        values.forEach((p: any) => {
+          const createdAt = p?.createdAt
+          if (!createdAt) return
+          const cd = new Date(createdAt)
+          if (isNaN(cd.getTime())) return
+          const key = `${cd.getFullYear()}-${String(cd.getMonth() + 1).padStart(2, '0')}`
+          const idx = keyToIdx[key]
+          if (idx !== undefined) months[idx].properties += 1
+        })
+      }
+      setPropertyGrowth(months.map(m => ({ month: m.month, properties: m.properties })))
+    } catch (e) {
+      console.error('Error loading property growth:', e)
+      setPropertyGrowth([])
+    }
+  }
+
+  const loadPriceRanges = async () => {
+    try {
+      const { getDatabase, ref, get } = await import('firebase/database')
+      const db = getDatabase()
+      const propsRef = ref(db, 'property')
+      const snap = await get(propsRef)
+      const buckets = {
+        'Under 5K': 0,
+        '5K - 10K': 0,
+        '10K - 20K': 0,
+        'Over 20K': 0,
+      } as Record<string, number>
+      if (snap.exists()) {
+        const values = Object.values(snap.val() as Record<string, any>)
+        values.forEach((p: any) => {
+          const rent = Number(p?.rent) || 0
+          if (rent < 5000) buckets['Under 5K']++
+          else if (rent < 10000) buckets['5K - 10K']++
+          else if (rent <= 20000) buckets['10K - 20K']++
+          else buckets['Over 20K']++
+        })
+      }
+      setPriceRanges(Object.entries(buckets).map(([name, value]) => ({ name, value })))
+    } catch (e) {
+      console.error('Error loading price ranges:', e)
+      setPriceRanges([])
+    }
+  }
 
   const downloadReport = async (type: string) => {
     try {
@@ -441,7 +551,7 @@ export function AdminDashboard() {
               <div className="text-right">
                 <div className="flex items-center gap-1 text-green-500 text-sm font-semibold">
                   <TrendingUp className="w-4 h-4" />
-                  +12.5%
+                  {userMoMGrowth.toFixed(1)}%
                 </div>
               </div>
             </div>
@@ -450,7 +560,7 @@ export function AdminDashboard() {
               <p className="text-4xl font-black text-houselook-darkgray mb-2">
                 {loadingStats ? '...' : stats?.totalUsers?.toLocaleString() ?? 0}
               </p>
-              <p className="text-xs text-houselook-coolgray">↗ Growth this month</p>
+              <p className="text-xs text-houselook-coolgray">↗ MoM growth (createdAt)</p>
             </div>
           </div>
 
@@ -514,6 +624,34 @@ export function AdminDashboard() {
                 {realTimeStats?.activeSessions ?? 0}
               </p>
               <p className="text-xs text-houselook-coolgray">⚡ Real-time users</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Availability Statistics */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="group bg-white/90 backdrop-blur-sm rounded-3xl p-8 shadow-xl border border-white/50 hover:shadow-2xl hover:scale-105 transition-all duration-500 hover:bg-gradient-to-br hover:from-white hover:to-green-50">
+            <div className="flex items-center justify-between mb-4">
+              <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-4 rounded-2xl shadow-lg group-hover:scale-110 transition-transform duration-300">
+                <CheckCircle className="w-8 h-8 text-white" />
+              </div>
+            </div>
+            <div>
+              <p className="text-houselook-coolgray text-sm font-medium mb-1">Available Properties</p>
+              <p className="text-4xl font-black text-houselook-darkgray mb-2">{availabilityStats.available}</p>
+              <p className="text-xs text-houselook-coolgray">Out of {availabilityStats.total} total</p>
+            </div>
+          </div>
+          <div className="group bg-white/90 backdrop-blur-sm rounded-3xl p-8 shadow-xl border border-white/50 hover:shadow-2xl hover:scale-105 transition-all duration-500 hover:bg-gradient-to-br hover:from-white hover:to-red-50">
+            <div className="flex items-center justify-between mb-4">
+              <div className="bg-gradient-to-br from-red-500 to-pink-600 p-4 rounded-2xl shadow-lg group-hover:scale-110 transition-transform duration-300">
+                <XCircle className="w-8 h-8 text-white" />
+              </div>
+            </div>
+            <div>
+              <p className="text-houselook-coolgray text-sm font-medium mb-1">Full / Occupied</p>
+              <p className="text-4xl font-black text-houselook-darkgray mb-2">{availabilityStats.full}</p>
+              <p className="text-xs text-houselook-coolgray">Out of {availabilityStats.total} total</p>
             </div>
           </div>
         </div>
@@ -596,6 +734,53 @@ export function AdminDashboard() {
                   stroke={CHART_COLORS.primary}
                   fillOpacity={1}
                   fill="url(#colorUsers)"
+                  strokeWidth={3}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Property Growth Over Time */}
+          <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-8 shadow-xl border border-white/50 hover:shadow-2xl transition-all duration-300">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="text-2xl font-bold text-houselook-darkgray mb-2">Property Growth</h3>
+                <p className="text-houselook-coolgray">New properties per month</p>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={350}>
+              <AreaChart data={propertyGrowth.length > 0 ? propertyGrowth : [
+                { month: 'Jan', properties: 0 },
+                { month: 'Feb', properties: 0 },
+                { month: 'Mar', properties: 0 },
+                { month: 'Apr', properties: 0 },
+                { month: 'May', properties: 0 },
+                { month: 'Jun', properties: 0 }
+              ]}>
+                <defs>
+                  <linearGradient id="colorProps" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={CHART_COLORS.success} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={CHART_COLORS.success} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month" stroke="#6B7280" fontSize={12} />
+                <YAxis stroke="#6B7280" fontSize={12} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(255,255,255,0.95)",
+                    border: "none",
+                    borderRadius: "16px",
+                    boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
+                    backdropFilter: "blur(10px)",
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="properties"
+                  stroke={CHART_COLORS.success}
+                  fillOpacity={1}
+                  fill="url(#colorProps)"
                   strokeWidth={3}
                 />
               </AreaChart>
@@ -694,14 +879,14 @@ export function AdminDashboard() {
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h3 className="text-2xl font-bold text-houselook-darkgray mb-2">Price Ranges</h3>
-                <p className="text-houselook-coolgray">Property price distribution</p>
+                <p className="text-houselook-coolgray">Property price distribution (by rent)</p>
               </div>
               <div className="bg-gradient-to-r from-orange-500 to-red-500 p-3 rounded-2xl">
                 <DollarSign className="w-6 h-6 text-white" />
               </div>
             </div>
             <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={propertyAnalytics?.priceRanges || []}>
+              <BarChart data={priceRanges}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="name" stroke="#6B7280" fontSize={12} />
                 <YAxis stroke="#6B7280" fontSize={12} />
@@ -1093,7 +1278,7 @@ export function AdminDashboard() {
                 </div>
                 <div>
                   <p className="text-green-600 font-semibold">Active Listings</p>
-                  <p className="text-2xl font-bold text-green-800">{propertyAnalytics?.propertyTypes?.reduce((sum: number, type: any) => sum + type.value, 0) || 0}</p>
+                  <p className="text-2xl font-bold text-green-800">{availabilityStats.available}</p>
                 </div>
               </div>
             </div>

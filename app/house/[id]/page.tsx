@@ -134,6 +134,7 @@ export default function HousePage() {
             lat: parseFloat(data.lat || "0"),
             lng: parseFloat(data.lng || "0"),
           },
+          deposit: parseInt(data.deposit) || 0,
         }
 
         console.log("Formatted house data:", formatted)

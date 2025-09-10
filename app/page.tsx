@@ -9,13 +9,33 @@ import { HouseCard } from "@/components/house-card"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 
+interface Filters {
+  location?: string
+  priceRange?: [number, number]
+  roomType?: string
+  selectedAmenities?: string[]
+}
+
+interface HouseForCard {
+  id: string
+  name: string
+  city: string
+  rent: number
+  bedroom: string
+  image1Url: string
+  image2Url?: string
+  amenities: string[]
+  available: boolean
+  secondName?: string
+}
+
 export default function HomePage() {
-  const [searchResults, setSearchResults] = useState(null)
-  const [searchFilters, setSearchFilters] = useState(null)
+  const [searchResults, setSearchResults] = useState<HouseForCard[] | null>(null)
+  const [searchFilters, setSearchFilters] = useState<Filters | null>(null)
   const [showCount, setShowCount] = useState(4)
   const router = useRouter()
 
-  const handleSearch = (results, filters) => {
+  const handleSearch = (results: HouseForCard[], filters: Filters) => {
     setSearchResults(results)
     setSearchFilters(filters)
     setShowCount(4)
@@ -54,7 +74,7 @@ export default function HomePage() {
             </div>
             {searchResults.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-                {searchResults.slice(0, showCount).map((house) => (
+                {searchResults.slice(0, showCount).map((house: HouseForCard) => (
                   <HouseCard key={house.id} house={house} />
                 ))}
               </div>

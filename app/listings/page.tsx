@@ -50,6 +50,10 @@ export default function ListingsPage() {
   const [isAnimated, setIsAnimated] = useState<boolean>(false)
   const [visibleCount, setVisibleCount] = useState<number>(12)
 
+  // Availability statistics
+  const totalAvailable = allHouses.reduce((n, h) => n + (h.available ? 1 : 0), 0)
+  const totalFull = allHouses.length - totalAvailable
+
   useEffect(() => {
     const db = getDatabase(app)
     const propertiesRef = ref(db, "property")
@@ -229,17 +233,17 @@ export default function ListingsPage() {
               </div>
               <div className="w-px h-8 bg-gray-300"></div>
               <div className="text-center">
-                <div className="text-2xl font-bold bg-gradient-to-r from-houselook-blue to-houselook-cyan bg-clip-text text-transparent">
-                  15+
+                <div className="text-2xl font-bold bg-gradient-to-r from-green-500 to-emerald-500 bg-clip-text text-transparent">
+                  {totalAvailable}
                 </div>
-                <div className="text-sm text-gray-500 font-medium">Locations</div>
+                <div className="text-sm text-gray-500 font-medium">Available</div>
               </div>
               <div className="w-px h-8 bg-gray-300"></div>
               <div className="text-center">
-                <div className="text-2xl font-bold bg-gradient-to-r from-houselook-cyan to-houselook-blue bg-clip-text text-transparent">
-                  24/7
+                <div className="text-2xl font-bold bg-gradient-to-r from-red-500 to-pink-500 bg-clip-text text-transparent">
+                  {totalFull}
                 </div>
-                <div className="text-sm text-gray-500 font-medium">Support</div>
+                <div className="text-sm text-gray-500 font-medium">Full</div>
               </div>
             </div>
           </div>

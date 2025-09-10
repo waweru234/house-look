@@ -513,6 +513,12 @@ export function HouseDetails({ house }: HouseDetailsProps) {
                   <p className="text-4xl font-bold text-cyan-600">
                     KSh {house.price.toLocaleString()}
                   </p>
+                  {typeof (house as any).deposit === 'number' && (house as any).deposit > 0 && (
+                    <div className="mt-2 text-gray-700">
+                      <p className="text-sm">Deposit</p>
+                      <p className="text-xl font-semibold">KSh {(house as any).deposit.toLocaleString()}</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Enhanced Save Button Section */}

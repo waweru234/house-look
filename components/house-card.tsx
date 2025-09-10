@@ -2,16 +2,12 @@
 
 "use client"
 
-import { useEffect, useState } from "react"
-import { onValue } from "firebase/database"
-import { db } from "@/lib/firebase"
+import { useEffect } from "react"
 import Image from "next/image"
-import Link from "next/link"
-import { MapPin, Wifi, Car, Shield, Eye, Star } from "lucide-react"
+import { MapPin, Wifi, Car, Shield, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { getCurrentUser } from "@/lib/auth"
-import { getDatabase, ref, get, set } from "firebase/database"
 import { useRouter } from "next/navigation"
 
 interface House {

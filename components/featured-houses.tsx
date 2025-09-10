@@ -16,7 +16,7 @@ interface FirebaseHouse {
   type: string
   image2Url: string
   furnished: string
-  available: string
+  available: boolean
   amenities?: string[]
 }
 
@@ -38,12 +38,15 @@ export function FeaturedHouses() {
           town: (house as any).town || "Unknown Location",
           rent: Number((house as any).rent || 0),
           type: (house as any).bedroom || "Bedsitter",
-          image2Url: (house as any).image1Url || "/placeholder.svg",
+          image2Url: (house as any).image2Url || (house as any).image2url || (house as any).image2 || "/placeholder.svg",
           furnished: (house as any).furnished || "Unfurnished",
-          available: (house as any).vacancies || "0",
+          available: Boolean((house as any).available),
           amenities: (house as any).amenities || [],
         })
       })
+
+      // Rank: available first
+      loaded.sort((a, b) => Number(b.available) - Number(a.available))
 
       setHouses(loaded.slice(0, 4)) // only the first 4 featured
     })
@@ -68,9 +71,10 @@ export function FeaturedHouses() {
               city: house.town,
               rent: house.rent,
               bedroom: house.type === "single" ? "Single" : house.type === "bedsitter" ? "Bedsitter" : house.type === "1 bedroom" ? "1 Bedroom" : house.type === "2 bedroom" ? "2 Bedroom" : house.type === "3 bedroom" ? "3 Bedroom" : house.type,
-              image1Url: house.image2Url,
+              image1Url: "/placeholder.svg",
+              image2Url: house.image2Url,
               amenities: house.amenities || [house.furnished],
-              vacancies: house.available,
+              available: house.available,
             }}
           />
         ))}
