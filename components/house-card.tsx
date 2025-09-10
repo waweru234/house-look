@@ -1,4 +1,4 @@
-// app/page.tsx or pages/index.tsx (for Next.js App Router or Pages Router)
+﻿// app/page.tsx or pages/index.tsx (for Next.js App Router or Pages Router)
 
 "use client"
 
@@ -17,12 +17,14 @@ import { useRouter } from "next/navigation"
 interface House {
   id: string
   name: string
+  secondName?: string
   city: string
   rent: number
   bedroom: string
   image1Url: string
+  image2Url?: string
   amenities: string[]
-  vacancies: string
+  available: boolean
 }
 
 function getAmenityIcon(amenity: string) {
@@ -43,6 +45,9 @@ export function HouseCard({ house }: { house: House }) {
   const user = getCurrentUser()
   const router = useRouter()
 
+  // Prefer image2Url; support common variants; fallback to placeholder
+  const primaryImage = (house.image2Url || (house as any).image2url || (house as any).image2 || "/placeholder.svg") as string
+
   useEffect(() => {
     if (user) {
       // Removed save-related logic
@@ -55,8 +60,8 @@ export function HouseCard({ house }: { house: House }) {
     <div className="group bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-white/50 hover:border-houselook-cyan/30 hover:-translate-y-2 backdrop-blur-sm">
       <div className="relative overflow-hidden">
         <Image
-          src={house.image1Url || "/placeholder.svg"}
-          alt={house.name}
+          src={primaryImage}
+          alt={house.secondName || "Property"}
           width={400}
           height={300}
           className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-700"
@@ -74,8 +79,8 @@ export function HouseCard({ house }: { house: House }) {
         </div>
 
         <div className="absolute top-3 left-3">
-          <Badge className={`text-white shadow-lg text-xs ${house.vacancies ? "bg-gradient-to-r from-green-500 to-green-600" : "bg-gradient-to-r from-red-500 to-red-600"}`}>
-            {house.vacancies ? "Available" : "Occupied"}
+          <Badge className={`text-white shadow-lg text-xs ${house.available ? "bg-gradient-to-r from-green-500 to-green-600" : "bg-gradient-to-r from-red-500 to-red-600"}`}>
+            {house.available ? "Available" : "Full"}
           </Badge>
         </div>
 
@@ -87,10 +92,8 @@ export function HouseCard({ house }: { house: House }) {
       </div>
 
       <div className="p-4">
-        <h3 className="text-sm font-bold text-black mb-2 line-clamp-2 group-hover:text-houselook-blue transition-colors duration-300 font-heading">
-          {house.name}
-        </h3>
-
+        {/* Title removed per request: hide property name */}
+        
         <div className="flex items-center text-gray-600 mb-3">
           <MapPin className="w-3 h-3 mr-1.5 text-houselook-cyan" />
           <span className="text-xs font-medium">{house.city}</span>

@@ -74,32 +74,39 @@ export default function HousePage() {
         console.log("House data received:", data)
 
         // Build images array from multiple possible shapes
-        const images: string[] = []
-        const addIfValid = (val: any) => {
-          if (typeof val === 'string' && val.trim().length > 0) images.push(val)
+        type IndexedUrl = { idx: number; url: string }
+        const indexed: IndexedUrl[] = []
+        const addIfValidIndexed = (idx: number, val: any) => {
+          if (idx >= 2 && typeof val === 'string' && val.trim().length > 0) {
+            indexed.push({ idx, url: val })
+          }
         }
 
         // If array provided directly
         if (Array.isArray(data.images)) {
-          data.images.forEach(addIfValid)
+          data.images.forEach((val: any, i: number) => {
+            // When provided as array, keep order; no image1Url key involved
+            if (typeof val === 'string' && val.trim().length > 0) indexed.push({ idx: i + 1, url: val })
+          })
         }
 
         // Top-level conventional keys image1Url..image10Url (and beyond)
         Object.keys(data).forEach((key) => {
           const match = key.match(/^image\s*(\d+)\s*(?:url)?$/i)
-          if (match) addIfValid(data[key])
+          if (match) addIfValidIndexed(Number(match[1]), data[key])
         })
 
         // Nested images object with numbered keys
         if (data.images && typeof data.images === 'object' && !Array.isArray(data.images)) {
           Object.keys(data.images).forEach((key) => {
             const match = key.match(/^image\s*(\d+)\s*(?:url)?$/i)
-            if (match) addIfValid(data.images[key])
+            if (match) addIfValidIndexed(Number(match[1]), data.images[key])
           })
         }
 
-        // Sort by the numeric suffix if possible
-        images.sort((a, b) => 0)
+        // Sort by the numeric suffix and map to URLs. This excludes index 1.
+        indexed.sort((a, b) => a.idx - b.idx)
+        const images = indexed.map((x) => x.url)
 
         const formatted = {
           id,

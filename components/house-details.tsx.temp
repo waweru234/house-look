@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useMemo } from "react"
 import Image from "next/image"
@@ -29,9 +29,6 @@ import { getCurrentUser } from "@/lib/auth"
 import { getDatabase, ref, get, set } from "firebase/database"
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogAction } from "@/components/ui/alert-dialog"
 import { saveHouse, unsaveHouse, getSavedHouses } from "@/lib/houses"
-import { GoogleMap } from "@/components/google-map"
-
-const HOUSELOOK_PHONE = "0793779647"
 
 interface House {
   id: number
@@ -86,7 +83,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
         if (match) {
           const idx = Number(match[1])
           const val = obj[key]
-          if (idx >= 2 && typeof val === 'string' && val.trim().length > 0) {
+          if (typeof val === 'string' && val.trim().length > 0) {
             urls.push({ idx, url: val })
           }
         }
@@ -99,7 +96,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
         if (matched) {
           const idx = Number(matched[1])
           const val = obj[key]
-          if (idx >= 2 && typeof val === 'string' && val.trim().length > 0) {
+          if (typeof val === 'string' && val.trim().length > 0) {
             urls.push({ idx, url: val })
           }
         }
@@ -191,11 +188,6 @@ export function HouseDetails({ house }: HouseDetailsProps) {
     }
   }
 
-  // Check if coordinates are valid (not 0,0)
-  const hasValidCoordinates = house.coordinates && 
-    house.coordinates.lat !== 0 && 
-    house.coordinates.lng !== 0
-
   if (!isClient) {
     return (
       <div className="min-h-screen bg-houselook-whitesmoke flex items-center justify-center p-4">
@@ -239,13 +231,13 @@ export function HouseDetails({ house }: HouseDetailsProps) {
                 <>
                   This property has been added to your <span className="font-semibold text-green-600">saved list</span>.
                   <br /><br />
-                  <span className="text-sm text-gray-500">?? It will be available for 24 hours, then automatically removed.</span>
+                  <span className="text-sm text-gray-500">💡 It will be available for 24 hours, then automatically removed.</span>
                 </>
               ) : (
                 <>
                   This property has been <span className="font-semibold text-red-600">removed</span> from your saved list.
                   <br /><br />
-                  <span className="text-sm text-gray-500">?? You can save it again anytime!</span>
+                  <span className="text-sm text-gray-500">💡 You can save it again anytime!</span>
                 </>
               )}
             </AlertDialogDescription>
@@ -332,7 +324,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
               <div className="relative h-96 md:h-[550px] rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-shadow duration-300 cursor-pointer group">
                 <Image
                   src={(images[currentImageIndex] || "/placeholder.svg")}
-                  alt={"Property"}
+                  alt={house.title}
                   fill
                   className="object-cover transition-transform duration-500 group-hover:scale-105"
                   onClick={toggleFullScreen}
@@ -403,7 +395,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
                     >
                       <Image
                         src={image || "/placeholder.svg"}
-                        alt={`Property ${index + 1}`}
+                        alt={`${house.title} ${index + 1}`}
                         fill
                         className="object-cover"
                       />
@@ -418,33 +410,17 @@ export function HouseDetails({ house }: HouseDetailsProps) {
               <h2 className="text-lg font-semibold mb-2 text-gray-800 flex items-center"><MapPin className="w-5 h-5 mr-2 text-cyan-500" />Location</h2>
               <Card className="border-gray-200/80 shadow-sm">
                 <CardContent className="p-6">
-                  {hasValidCoordinates ? (
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Property Location</h3>
-                      <GoogleMap 
-                        lat={house.coordinates.lat} 
-                        lng={house.coordinates.lng} 
-                        title={house.title}
-                        location={house.location}
-                      />
-                      <div className="mt-4 bg-gray-100 p-4 rounded-lg">
-                        {/* name hidden */}
-                        <p className="text-sm text-gray-600 mt-1">{house.location}</p>
-                      </div>
+                  <div className="text-center">
+                    <MapPin className="w-12 h-12 text-cyan-500 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">Property Location</h3>
+                    <p className="text-gray-600 mb-4">
+                      Please copy the property name and paste it on Google Maps to get the exact location.
+                    </p>
+                    <div className="bg-gray-100 p-4 rounded-lg">
+                      <p className="font-medium text-gray-800">{house.title}</p>
+                      <p className="text-sm text-gray-600 mt-1">{house.location}</p>
                     </div>
-                  ) : (
-                    <div className="text-center">
-                      <MapPin className="w-12 h-12 text-cyan-500 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-gray-800 mb-2">Property Location</h3>
-                      <p className="text-gray-600 mb-4">
-                        Please copy the property name and paste it on Google Maps to get the exact location.
-                      </p>
-                      <div className="bg-gray-100 p-4 rounded-lg">
-                        {/* name hidden */}
-                        <p className="text-sm text-gray-600 mt-1">{house.location}</p>
-                      </div>
-                    </div>
-                  )}
+                  </div>
                 </CardContent>
               </Card>
             </section>
@@ -457,7 +433,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
                     {house.type}
                   </Badge>
                 </div>
-                <h1 className="text-4xl font-bold text-gray-900 mb-3">Property</h1>
+                <h1 className="text-4xl font-bold text-gray-900 mb-3">{house.title}</h1>
                 <div className="flex items-center text-gray-500 text-lg">
                   <MapPin className="w-6 h-6 mr-2 text-cyan-500" />
                   <span>{house.location}</span>
@@ -542,7 +518,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
                   </Button>
                   
                   <p className="text-xs text-gray-600 mt-2 text-center">
-                    ?? Saved properties are available for 24 hours
+                    💡 Saved properties are available for 24 hours
                   </p>
                 </div>
 
@@ -629,7 +605,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
           <div className="relative w-full h-full max-w-5xl max-h-[90vh]">
             <Image
               src={(images[currentImageIndex] || "/placeholder.svg")}
-              alt={"Property"}
+              alt={house.title}
               fill
               className="object-contain"
             />
@@ -668,5 +644,3 @@ export function HouseDetails({ house }: HouseDetailsProps) {
     </div>
   )
 }
-
-

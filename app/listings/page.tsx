@@ -26,8 +26,10 @@ interface House {
   rent: number
   bedroom: string
   image1Url: string
+  image2Url?: string
   amenities: string[]
   vacancies: string
+  available: boolean
 }
 
 interface Filters {
@@ -64,10 +66,14 @@ export default function ListingsPage() {
           rent: house.rent || 0,
           bedroom: house.bedroom || "Unknown",
           image1Url: house.image1Url || "/placeholder.svg",
+          image2Url: house.image2Url || house.image2url || house.image2 || "/placeholder.svg",
           amenities: [house.furnished, ...(house.amenities || [])].filter(Boolean),
           vacancies: house.vacancies || "0",
+          available: !!house.available,
         })
       }
+      // Rank: available first
+      houses.sort((a, b) => Number(b.available) - Number(a.available))
       setAllHouses(houses)
       setFilteredHouses(houses)
       setIsLoading(false)
@@ -128,6 +134,9 @@ export default function ListingsPage() {
         filtered.sort((a, b) => b.rent - a.rent)
         break
     }
+
+    // Rank: available first after other sorts
+    filtered.sort((a, b) => Number(b.available) - Number(a.available))
 
     setFilteredHouses(filtered)
     setIsLoading(false)

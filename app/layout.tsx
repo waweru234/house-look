@@ -1,9 +1,10 @@
-import type React from "react"
+﻿import type React from "react"
 import type { Metadata } from "next"
 import { Noto_Serif, Bebas_Neue, Rowdies } from "next/font/google"
 import "./globals.css"
 import { Navigation } from "@/components/navigation"
 import Head from "next/head"
+import Script from "next/script"
 
 const notoSerif = Noto_Serif({
   subsets: ["latin"],
@@ -44,6 +45,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-houselook-whitesmoke min-h-screen font-sans antialiased">
         <Navigation />
         {children}
+        <Script
+          src={`https://maps.googleapis.com/maps/api/js?key=AIzaSyBSzI3CKOvryU6VUz829abXj0VuqrLKelQ&libraries=places`}
+          strategy="lazyOnload"
+        />
       </body>
     </html>
   )

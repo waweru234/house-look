@@ -37,7 +37,7 @@ export default function HouseClient({ id }: { id: string }) {
           location: `${data.city || ""}, ${data.town || ""}`,
           price: parseInt(data.rent) || 0,
           type: data.type || "",
-          images: [data.image1Url, data.image2Url, data.image3Url, data.image4Url].filter(Boolean),
+          images: [data.image2Url, data.image3Url, data.image4Url].filter(Boolean),
           amenities: Array.isArray(data.amenities) ? data.amenities : [],
           available: data.status?.toLowerCase() === "available",
           description: data.description || "",
