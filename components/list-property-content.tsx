@@ -31,6 +31,7 @@ export function ListPropertyContent() {
     amenitiesCsv: "", // comma separated
     county: "",
     subCounty: "",
+    city: "",
     town: "",
     address: "",
     latitude: "",
@@ -89,22 +90,23 @@ export function ListPropertyContent() {
         name: formData.propertyName,
         propertyCategory: formData.propertyCategory,
         unitType: formData.unitType,
-        price: Number(formData.rentAmount) || 0,
+        rent: Number(formData.rentAmount) || 0, // Store in rent node
         deposit: Number(formData.depositAmount) || 0,
         furnishedStatus: formData.furnishedStatus,
         amenities: amenitiesArray,
-        location: {
-          county: formData.county,
-          subCounty: formData.subCounty,
-          town: formData.town,
-          address: formData.address,
+        location: formData.address, // Store address in location node
+        county: formData.county,
+        subCounty: formData.subCounty,
+        city: formData.city, // Store city in city node
+        town: formData.town, // Store town in town node
+        coordinates: {
           lat: Number(formData.latitude) || null,
           lng: Number(formData.longitude) || null,
         },
         description: formData.description,
-        directions: formData.directions,
+        direction: formData.directions, // Store in direction node
         agent: {
-          name: formData.agentName,
+          names: formData.agentName, // Store agent name in names node
           phone: formData.agentPhone,
         },
         available: true,
@@ -129,6 +131,7 @@ export function ListPropertyContent() {
           amenitiesCsv: "",
           county: "",
           subCounty: "",
+          city: "",
           town: "",
           address: "",
           latitude: "",
@@ -174,11 +177,11 @@ export function ListPropertyContent() {
 
   const geocodeAddress = async () => {
     setGeocodeMessage("")
-    const parts = [formData.address, formData.town, formData.subCounty, formData.county, "Kenya"]
+    const parts = [formData.address, formData.town, formData.city, formData.subCounty, formData.county, "Kenya"]
       .map((p) => (p || "").trim())
       .filter(Boolean)
     if (parts.length === 0) {
-      setGeocodeMessage("Enter address/town/county to geocode.")
+      setGeocodeMessage("Enter address/town/city/county to geocode.")
       return
     }
     const q = encodeURIComponent(parts.join(", "))
@@ -369,6 +372,10 @@ export function ListPropertyContent() {
                   <div className="space-y-2">
                     <Label htmlFor="subCounty" className="font-bold">Subcounty</Label>
                     <Input id="subCounty" value={formData.subCounty} onChange={(e) => updateField("subCounty", e.target.value)} placeholder="e.g., Westlands" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="city" className="font-bold">City</Label>
+                    <Input id="city" value={formData.city} onChange={(e) => updateField("city", e.target.value)} placeholder="e.g., Nairobi" />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="town" className="font-bold">Town</Label>
