@@ -79,7 +79,12 @@ export function SignupForm() {
     setIsLoading(true)
     try {
       await registerWithEmail(name, email, password)
-      router.push("/dashboard")
+      // Show success message about email verification
+      setErrors({ api: "Account created successfully! Please check your email and verify your account before signing in." })
+      // Redirect to login after a delay
+      setTimeout(() => {
+        router.push("/login?message=verify-email")
+      }, 3000)
     } catch (error: any) {
       setErrors({ api: error.message })
     } finally {
@@ -165,7 +170,13 @@ export function SignupForm() {
             </div>
             {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
           </div>
-          {errors.api && <p className="text-red-500 text-sm text-center">{errors.api}</p>}
+          {errors.api && (
+            <p className={`text-sm text-center ${
+              errors.api.includes("successfully") ? "text-green-600" : "text-red-500"
+            }`}>
+              {errors.api}
+            </p>
+          )}
         </CardContent>
         <CardFooter className="flex flex-col gap-4 pt-6">
           <Button onClick={handleSubmit} className="w-full" disabled={isLoading}>

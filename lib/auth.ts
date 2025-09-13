@@ -9,6 +9,8 @@ import {
   signOut,
   onAuthStateChanged,
   updateProfile,
+  sendEmailVerification,
+  sendPasswordResetEmail,
 } from "firebase/auth"
 import { auth } from "./firebase"
 import { getDatabase, ref, set, get } from "firebase/database"
@@ -20,6 +22,7 @@ export interface UserData {
   points: number
   createdAt: string
   isAdmin: boolean
+  emailVerified: boolean
 }
 
 async function saveUserToDatabase(userData: UserData) {
@@ -33,6 +36,9 @@ export async function registerWithEmail(name: string, email: string, password: s
     const user = result.user
 
     await updateProfile(user, { displayName: name })
+    
+    // Send email verification
+    await sendEmailVerification(user)
 
     const userData: UserData = {
       name,
@@ -41,6 +47,7 @@ export async function registerWithEmail(name: string, email: string, password: s
       points: 100,
       createdAt: new Date().toISOString(),
       isAdmin: false,
+      emailVerified: user.emailVerified,
     }
 
     await saveUserToDatabase(userData)
@@ -82,6 +89,7 @@ export async function loginWithGoogle(): Promise<UserData> {
         points: 100,
         createdAt: new Date().toISOString(),
         isAdmin: false,
+        emailVerified: user.emailVerified,
       }
       await saveUserToDatabase(userData)
     }
@@ -102,12 +110,22 @@ export async function loginWithGoogle(): Promise<UserData> {
 export async function loginWithEmail(email: string, password: string): Promise<UserData> {
   const result = await signInWithEmailAndPassword(auth, email, password)
   const user = result.user
+  
+  // Check if email is verified
+  if (!user.emailVerified) {
+    throw new Error("Please verify your email address before signing in. Check your inbox for a verification email.")
+  }
+  
   const db = getDatabase()
   const userRef = ref(db, `users/${user.uid}`)
   const snapshot = await get(userRef)
 
   if (snapshot.exists()) {
     const userData = snapshot.val()
+    // Update email verification status
+    userData.emailVerified = user.emailVerified
+    await saveUserToDatabase(userData)
+    
     localStorage.setItem("isAuthenticated", "true")
     localStorage.setItem("userData", JSON.stringify(userData))
     window.dispatchEvent(new Event("authStateChanged"))
@@ -122,6 +140,7 @@ export async function loginWithEmail(email: string, password: string): Promise<U
       points: 0, // Or some default, maybe not 300 for a login case
       createdAt: new Date().toISOString(),
       isAdmin: false,
+      emailVerified: user.emailVerified,
     }
     await saveUserToDatabase(userData)
     localStorage.setItem("isAuthenticated", "true")
@@ -149,6 +168,22 @@ export function getCurrentUser(): UserData | null {
   } catch {
     return null
   }
+}
+
+export async function resendEmailVerification(): Promise<void> {
+  if (!auth.currentUser) {
+    throw new Error("No user is currently signed in.")
+  }
+  
+  if (auth.currentUser.emailVerified) {
+    throw new Error("Email is already verified.")
+  }
+  
+  await sendEmailVerification(auth.currentUser)
+}
+
+export async function resetPassword(email: string): Promise<void> {
+  await sendPasswordResetEmail(auth, email)
 }
 
 export function onAuthStateChange(callback: (user: UserData | null) => void) {
