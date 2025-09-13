@@ -1,5 +1,4 @@
-﻿// app/page.tsx or pages/index.tsx (for Next.js App Router or Pages Router)
-
+﻿
 "use client"
 
 import { useEffect } from "react"

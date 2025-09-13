@@ -419,17 +419,25 @@ export function HouseDetails({ house }: HouseDetailsProps) {
               <Card className="border-gray-200/80 shadow-sm">
                 <CardContent className="p-6">
                   {hasValidCoordinates ? (
-                    <div>
+                    <div className="relative">
                       <h3 className="text-lg font-semibold text-gray-800 mb-4">Property Location</h3>
-                      <GoogleMap 
-                        lat={house.coordinates.lat} 
-                        lng={house.coordinates.lng} 
-                        title={house.title}
-                        location={house.location}
-                      />
-                      <div className="mt-4 bg-gray-100 p-4 rounded-lg">
+                      <div className="blur-sm pointer-events-none">
+                        <GoogleMap 
+                          lat={house.coordinates.lat} 
+                          lng={house.coordinates.lng} 
+                          title={house.title}
+                          location={house.location}
+                        />
+                      </div>
+                      <div className="mt-4 bg-gray-100 p-4 rounded-lg blur-sm">
                         {/* name hidden */}
                         <p className="text-sm text-gray-600 mt-1">{house.location}</p>
+                      </div>
+                      <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-sm rounded-lg">
+                        <div className="text-center">
+                          <MapPin className="w-12 h-12 text-cyan-500 mx-auto mb-2" />
+                          <p className="text-gray-600 font-medium">Contact HouseLook for exact location</p>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -437,9 +445,9 @@ export function HouseDetails({ house }: HouseDetailsProps) {
                       <MapPin className="w-12 h-12 text-cyan-500 mx-auto mb-4" />
                       <h3 className="text-lg font-semibold text-gray-800 mb-2">Property Location</h3>
                       <p className="text-gray-600 mb-4">
-                        Please copy the property name and paste it on Google Maps to get the exact location.
+                        Please contact HouseLook for the exact location details.
                       </p>
-                      <div className="bg-gray-100 p-4 rounded-lg">
+                      <div className="bg-gray-100 p-4 rounded-lg blur-sm">
                         {/* name hidden */}
                         <p className="text-sm text-gray-600 mt-1">{house.location}</p>
                       </div>
@@ -458,7 +466,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
                   </Badge>
                 </div>
                 <h1 className="text-4xl font-bold text-gray-900 mb-3">Property</h1>
-                <div className="flex items-center text-gray-500 text-lg">
+                <div className="flex items-center text-gray-500 text-lg blur-sm">
                   <MapPin className="w-6 h-6 mr-2 text-cyan-500" />
                   <span>{house.location}</span>
                 </div>
@@ -592,7 +600,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          navigator.clipboard.writeText(house.agent.whatsapp)
+                          navigator.clipboard.writeText(HOUSELOOK_PHONE)
                           alert("WhatsApp number copied to clipboard!")
                         }}
                         className="text-green-600 border-green-600 hover:bg-green-50"
@@ -614,7 +622,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
                     <Button
                       variant="outline"
                       className="w-full border-cyan-600 text-cyan-600 hover:bg-cyan-50 h-12 text-lg"
-                      onClick={() => window.open(`https://wa.me/${house.agent.whatsapp.replace("+", "")}`)}
+                      onClick={() => window.open(`https://wa.me/${HOUSELOOK_PHONE.replace("+", "")}`)}
                     >
                       <MessageCircle className="w-5 h-5 mr-2" />
                       WhatsApp
@@ -664,7 +672,7 @@ export function HouseDetails({ house }: HouseDetailsProps) {
           <Button
             variant="outline"
             className="flex-1 border-cyan-600 text-cyan-600 hover:bg-cyan-50 h-12 text-base"
-            onClick={() => window.open(`https://wa.me/${house.agent.whatsapp.replace("+", "")}`)}
+            onClick={() => window.open(`https://wa.me/${HOUSELOOK_PHONE.replace("+", "")}`)}
           >
             <MessageCircle className="w-5 h-5 mr-2" />
             WhatsApp
