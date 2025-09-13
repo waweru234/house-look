@@ -72,7 +72,7 @@ export function AdminDashboard() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   
   // Real data states
-  const [stats, setStats] = useState<{ totalUsers: number; totalProperties: number; totalRevenue: number } | null>(null)
+  const [stats, setStats] = useState<{ totalUsers: number; totalProperties: number; totalRevenue: number; activeUsers: number; averagePrice: number } | null>(null)
   const [userAnalytics, setUserAnalytics] = useState<any>(null)
   const [propertyAnalytics, setPropertyAnalytics] = useState<any>(null)
   const [revenueAnalytics, setRevenueAnalytics] = useState<any>(null)
@@ -84,6 +84,10 @@ export function AdminDashboard() {
   const [propertyGrowth, setPropertyGrowth] = useState<Array<{ month: string; properties: number }>>([])
   // Price ranges from rent
   const [priceRanges, setPriceRanges] = useState<Array<{ name: string; value: number }>>([])
+  // Location distribution based on town
+  const [locationDistribution, setLocationDistribution] = useState<Array<{ name: string; value: number }>>([])
+  // XP calculation
+  const [xpStats, setXpStats] = useState<{ totalXp: number; revenueXp: number; listingXp: number }>({ totalXp: 0, revenueXp: 0, listingXp: 0 })
   
   // Loading states
   const [loadingStats, setLoadingStats] = useState(true)
@@ -148,6 +152,9 @@ export function AdminDashboard() {
     loadAvailability()
     loadPropertyGrowth()
     loadPriceRanges()
+    loadLocationDistribution()
+    loadActiveUsers()
+    calculateXP()
     
     // Set up real-time listeners with error handling
     let unsubscribeStats: (() => void) | null = null
@@ -179,6 +186,9 @@ export function AdminDashboard() {
         loadAvailability()
         loadPropertyGrowth()
         loadPriceRanges()
+        loadLocationDistribution()
+        loadActiveUsers()
+        calculateXP()
       }).catch(error => {
         console.error('Error refreshing analytics data:', error)
       })
@@ -260,7 +270,16 @@ export function AdminDashboard() {
       if (snap.exists()) {
         const values = Object.values(snap.val() as Record<string, any>)
         values.forEach((p: any) => {
-          const rent = Number(p?.rent) || 0
+          // Convert rent to number, handling both string and number types
+          let rent = 0
+          if (typeof p?.rent === 'string') {
+            // Remove any non-numeric characters except decimal point
+            const cleanRent = p.rent.replace(/[^\d.]/g, '')
+            rent = parseFloat(cleanRent) || 0
+          } else if (typeof p?.rent === 'number') {
+            rent = p.rent
+          }
+          
           if (rent < 5000) buckets['Under 5K']++
           else if (rent < 10000) buckets['5K - 10K']++
           else if (rent <= 20000) buckets['10K - 20K']++
@@ -271,6 +290,120 @@ export function AdminDashboard() {
     } catch (e) {
       console.error('Error loading price ranges:', e)
       setPriceRanges([])
+    }
+  }
+
+  const loadLocationDistribution = async () => {
+    try {
+      const { getDatabase, ref, get } = await import('firebase/database')
+      const db = getDatabase()
+      const propsRef = ref(db, 'property')
+      const snap = await get(propsRef)
+      
+      const locationCounts: Record<string, number> = {}
+      
+      if (snap.exists()) {
+        const values = Object.values(snap.val() as Record<string, any>)
+        values.forEach((p: any) => {
+          const town = p?.town || p?.city || 'Unknown'
+          locationCounts[town] = (locationCounts[town] || 0) + 1
+        })
+      }
+      
+      const distribution = Object.entries(locationCounts)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 10) // Top 10 locations
+      
+      setLocationDistribution(distribution)
+    } catch (e) {
+      console.error('Error loading location distribution:', e)
+      setLocationDistribution([])
+    }
+  }
+
+  const loadActiveUsers = async () => {
+    try {
+      const { getDatabase, ref, get } = await import('firebase/database')
+      const db = getDatabase()
+      const usersRef = ref(db, 'users')
+      const snap = await get(usersRef)
+      
+      let activeUsers = 0
+      if (snap.exists()) {
+        const users = Object.values(snap.val() as Record<string, any>)
+        // Consider users active if they have logged in within the last 30 days
+        const thirtyDaysAgo = new Date()
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+        
+        activeUsers = users.filter((user: any) => {
+          if (user.lastLoginAt) {
+            const lastLogin = new Date(user.lastLoginAt)
+            return lastLogin > thirtyDaysAgo
+          }
+          // If no lastLoginAt, consider them active if they were created recently
+          if (user.createdAt) {
+            const createdAt = new Date(user.createdAt)
+            return createdAt > thirtyDaysAgo
+          }
+          return false
+        }).length
+      }
+      
+      // Update stats with active users
+      setStats(prev => prev ? { ...prev, activeUsers } : null)
+    } catch (e) {
+      console.error('Error loading active users:', e)
+    }
+  }
+
+  const calculateXP = async () => {
+    try {
+      const { getDatabase, ref, get } = await import('firebase/database')
+      const db = getDatabase()
+      
+      // Get properties for listing XP
+      const propsRef = ref(db, 'property')
+      const propsSnap = await get(propsRef)
+      
+      let totalRent = 0
+      let activeListings = 0
+      
+      if (propsSnap.exists()) {
+        const properties = Object.values(propsSnap.val() as Record<string, any>)
+        properties.forEach((p: any) => {
+          // Convert rent to number
+          let rent = 0
+          if (typeof p?.rent === 'string') {
+            const cleanRent = p.rent.replace(/[^\d.]/g, '')
+            rent = parseFloat(cleanRent) || 0
+          } else if (typeof p?.rent === 'number') {
+            rent = p.rent
+          }
+          
+          totalRent += rent
+          if (p?.available === true || p?.status === 'available') {
+            activeListings++
+          }
+        })
+      }
+      
+      // Calculate XP based on revenue and active listings
+      const revenueXp = Math.floor(totalRent / 1000) // 1 XP per 1000 KES
+      const listingXp = activeListings * 10 // 10 XP per active listing
+      const totalXp = revenueXp + listingXp
+      
+      setXpStats({ totalXp, revenueXp, listingXp })
+      
+      // Calculate average price
+      const totalProperties = propsSnap.exists() ? Object.keys(propsSnap.val()).length : 0
+      const averagePrice = totalProperties > 0 ? totalRent / totalProperties : 0
+      
+      // Update stats with average price
+      setStats(prev => prev ? { ...prev, averagePrice } : null)
+      
+    } catch (e) {
+      console.error('Error calculating XP:', e)
     }
   }
 
@@ -332,38 +465,38 @@ export function AdminDashboard() {
   const getAchievements = () => {
     const achievements = []
     
-    if (stats?.totalRevenue && stats.totalRevenue >= 100000) {
+    if (xpStats.totalXp >= 1000) {
       achievements.push({
-        title: "Revenue Milestone",
-        description: `Reached KES ${(stats.totalRevenue / 1000).toFixed(0)}K total revenue`,
-        icon: Trophy,
+        title: "XP Master",
+        description: `Earned ${xpStats.totalXp.toLocaleString()} total XP`,
+        icon: Star,
         color: "from-yellow-400 to-orange-500",
       })
     }
     
-    if (stats?.totalUsers && stats.totalUsers >= 1000) {
+    if (stats?.activeUsers && stats.activeUsers >= 100) {
       achievements.push({
-        title: "User Champion",
-        description: `${stats.totalUsers}+ registered users`,
-        icon: Crown,
+        title: "Active Community",
+        description: `${stats.activeUsers}+ active users (30 days)`,
+        icon: Users,
         color: "from-purple-500 to-indigo-600",
       })
     }
     
-    if (stats?.totalProperties && stats.totalProperties >= 500) {
+    if (availabilityStats.available >= 50) {
       achievements.push({
-        title: "Property Master",
-        description: `${stats.totalProperties}+ properties listed`,
-        icon: Award,
+        title: "Property Empire",
+        description: `${availabilityStats.available}+ active listings`,
+        icon: Home,
         color: "from-green-400 to-cyan-500"
       })
     }
     
-    if (revenueAnalytics?.revenueLevels?.[0]?.streak >= 12) {
+    if (stats?.averagePrice && stats.averagePrice >= 15000) {
       achievements.push({
-        title: "Growth Streak",
-        description: `${revenueAnalytics.revenueLevels[0].streak} months of consecutive growth`,
-        icon: Flame,
+        title: "Premium Market",
+        description: `KES ${Math.round(stats.averagePrice).toLocaleString()} average price`,
+        icon: DollarSign,
         color: "from-red-500 to-pink-500",
       })
     }
@@ -542,7 +675,7 @@ export function AdminDashboard() {
         )}
 
         {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 -mt-16 relative z-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8 -mt-16 relative z-10">
           <div className="group bg-white/90 backdrop-blur-sm rounded-3xl p-8 shadow-xl border border-white/50 hover:shadow-2xl hover:scale-105 transition-all duration-500 hover:bg-gradient-to-br hover:from-white hover:to-blue-50">
             <div className="flex items-center justify-between mb-4">
               <div className="bg-gradient-to-br from-houselook-cyan to-houselook-teal p-4 rounded-2xl shadow-lg group-hover:scale-110 transition-transform duration-300">
@@ -626,6 +759,27 @@ export function AdminDashboard() {
               <p className="text-xs text-houselook-coolgray">⚡ Real-time users</p>
             </div>
           </div>
+
+          <div className="group bg-white/90 backdrop-blur-sm rounded-3xl p-8 shadow-xl border border-white/50 hover:shadow-2xl hover:scale-105 transition-all duration-500 hover:bg-gradient-to-br hover:from-white hover:to-purple-50">
+            <div className="flex items-center justify-between mb-4">
+              <div className="bg-gradient-to-br from-purple-500 to-indigo-600 p-4 rounded-2xl shadow-lg group-hover:scale-110 transition-transform duration-300">
+                <Users className="w-8 h-8 text-white" />
+              </div>
+              <div className="text-right">
+                <div className="flex items-center gap-1 text-green-500 text-sm font-semibold">
+                  <CheckCircle className="w-4 h-4" />
+                  30 Days
+                </div>
+              </div>
+            </div>
+            <div>
+              <p className="text-houselook-coolgray text-sm font-medium mb-1">Active Users</p>
+              <p className="text-4xl font-black text-houselook-darkgray mb-2">
+                {stats?.activeUsers ?? 0}
+              </p>
+              <p className="text-xs text-houselook-coolgray">↗ Last 30 days</p>
+            </div>
+          </div>
         </div>
 
         {/* Availability Statistics */}
@@ -652,6 +806,74 @@ export function AdminDashboard() {
               <p className="text-houselook-coolgray text-sm font-medium mb-1">Full / Occupied</p>
               <p className="text-4xl font-black text-houselook-darkgray mb-2">{availabilityStats.full}</p>
               <p className="text-xs text-houselook-coolgray">Out of {availabilityStats.total} total</p>
+            </div>
+          </div>
+        </div>
+
+        {/* XP System Section */}
+        <div className="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 rounded-3xl p-8 shadow-2xl border border-purple-800 hover:shadow-3xl transition-all duration-300 mb-8 relative overflow-hidden">
+          {/* Animated Background Elements */}
+          <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute top-10 right-10 w-32 h-32 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 rounded-full blur-2xl animate-pulse"></div>
+            <div className="absolute bottom-10 left-10 w-24 h-24 bg-gradient-to-r from-pink-500/20 to-purple-500/20 rounded-full blur-xl animate-pulse delay-1000"></div>
+            <div className="absolute top-1/2 left-1/2 w-16 h-16 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-full blur-lg animate-spin-slow"></div>
+          </div>
+
+          <div className="relative z-10">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
+              <div className="mb-6 lg:mb-0">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="bg-gradient-to-r from-yellow-400 to-orange-500 p-4 rounded-2xl shadow-lg">
+                    <Star className="w-8 h-8 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-3xl font-black text-white mb-2">🎮 XP System</h3>
+                    <p className="text-gray-300">Earn XP through revenue and active listings!</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* XP Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="group bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 hover:shadow-xl transition-all duration-300 hover:scale-105 relative overflow-hidden">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-3 rounded-xl">
+                    <DollarSign className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-sm font-medium">Revenue XP</p>
+                    <p className="text-2xl font-bold text-white">{xpStats.revenueXp.toLocaleString()}</p>
+                  </div>
+                </div>
+                <p className="text-gray-400 text-xs">1 XP per 1,000 KES revenue</p>
+              </div>
+
+              <div className="group bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 hover:shadow-xl transition-all duration-300 hover:scale-105 relative overflow-hidden">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-gradient-to-r from-blue-500 to-cyan-600 p-3 rounded-xl">
+                    <Home className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-sm font-medium">Listing XP</p>
+                    <p className="text-2xl font-bold text-white">{xpStats.listingXp.toLocaleString()}</p>
+                  </div>
+                </div>
+                <p className="text-gray-400 text-xs">10 XP per active listing</p>
+              </div>
+
+              <div className="group bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 hover:shadow-xl transition-all duration-300 hover:scale-105 relative overflow-hidden">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-3 rounded-xl">
+                    <Trophy className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-sm font-medium">Total XP</p>
+                    <p className="text-2xl font-bold text-white">{xpStats.totalXp.toLocaleString()}</p>
+                  </div>
+                </div>
+                <p className="text-gray-400 text-xs">Combined XP score</p>
+              </div>
             </div>
           </div>
         </div>
@@ -1010,7 +1232,7 @@ export function AdminDashboard() {
                 </div>
                 <div className="text-right">
                   <p className="text-gray-400 text-sm">Total Score</p>
-                  <p className="text-2xl font-bold text-cyan-400">2,847 XP</p>
+                  <p className="text-2xl font-bold text-cyan-400">{xpStats.totalXp.toLocaleString()} XP</p>
                 </div>
               </div>
 
@@ -1081,24 +1303,24 @@ export function AdminDashboard() {
               <div className="grid grid-cols-3 gap-4 mt-6">
                 <div className="text-center">
                   <div className="bg-gradient-to-r from-green-400 to-emerald-500 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2">
-                    <Trophy className="w-6 h-6 text-white" />
+                    <DollarSign className="w-6 h-6 text-white" />
                   </div>
-                  <p className="text-green-400 font-bold text-sm">Level 12</p>
-                  <p className="text-gray-400 text-xs">Revenue Master</p>
+                  <p className="text-green-400 font-bold text-sm">{xpStats.revenueXp.toLocaleString()}</p>
+                  <p className="text-gray-400 text-xs">Revenue XP</p>
                 </div>
                 <div className="text-center">
                   <div className="bg-gradient-to-r from-purple-400 to-pink-500 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2">
-                    <Flame className="w-6 h-6 text-white" />
+                    <Home className="w-6 h-6 text-white" />
                   </div>
-                  <p className="text-purple-400 font-bold text-sm">52 Weeks</p>
-                  <p className="text-gray-400 text-xs">Growth Streak</p>
+                  <p className="text-purple-400 font-bold text-sm">{xpStats.listingXp.toLocaleString()}</p>
+                  <p className="text-gray-400 text-xs">Listing XP</p>
                 </div>
                 <div className="text-center">
                   <div className="bg-gradient-to-r from-cyan-400 to-cyan-500 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2">
                     <Star className="w-6 h-6 text-white" />
                   </div>
-                  <p className="text-cyan-400 font-bold text-sm">2,847 XP</p>
-                  <p className="text-gray-400 text-xs">Total Score</p>
+                  <p className="text-cyan-400 font-bold text-sm">{xpStats.totalXp.toLocaleString()}</p>
+                  <p className="text-gray-400 text-xs">Total XP</p>
                 </div>
               </div>
             </div>
@@ -1290,7 +1512,7 @@ export function AdminDashboard() {
                 </div>
                 <div>
                   <p className="text-purple-600 font-semibold">Avg Price</p>
-                  <p className="text-2xl font-bold text-purple-800">KES {((stats?.totalRevenue || 0) / (stats?.totalProperties || 1)).toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-purple-800">KES {Math.round(stats?.averagePrice || 0).toLocaleString()}</p>
                 </div>
               </div>
             </div>
@@ -1313,7 +1535,7 @@ export function AdminDashboard() {
             <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200">
               <h4 className="text-lg font-bold text-slate-800 mb-4">Location Distribution</h4>
               <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={propertyAnalytics?.locationDistribution || []}>
+                <BarChart data={locationDistribution.length > 0 ? locationDistribution : []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
                   <YAxis stroke="#64748b" fontSize={12} />

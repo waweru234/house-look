@@ -11,13 +11,16 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Eye, EyeOff, Mail, Lock, ArrowRight, Sparkles, Home } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { loginWithEmail, loginWithGoogle } from "@/lib/auth"
+import { loginWithEmail, loginWithGoogle, resendEmailVerification } from "@/lib/auth"
 export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isAnimated, setIsAnimated] = useState(false)
+  const [error, setError] = useState("")
+  const [showResendVerification, setShowResendVerification] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const message = searchParams.get('message')
@@ -32,6 +35,7 @@ export function LoginForm() {
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault()
   setIsLoading(true)
+  setError("")
 
   try {
     const user = await loginWithEmail(email, password)
@@ -44,9 +48,14 @@ const handleSubmit = async (e: React.FormEvent) => {
     } else {
       router.push("/dashboard")
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error(err)
-    alert("Login failed. Check credentials.")
+    setError(err.message || "Login failed. Check credentials.")
+    
+    // Show resend verification option if email is not verified
+    if (err.message && err.message.includes("verify your email")) {
+      setShowResendVerification(true)
+    }
   } finally {
     setIsLoading(false)
   }
@@ -54,6 +63,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
 const handleGoogleLogin = async () => {
   setIsLoading(true)
+  setError("")
   try {
     const user = await loginWithGoogle()
     const redirectPath = localStorage.getItem("redirectAfterLogin")
@@ -65,11 +75,24 @@ const handleGoogleLogin = async () => {
     } else {
       router.push("/dashboard")
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error(err)
-    alert("Google login failed")
+    setError(err.message || "Google login failed")
   } finally {
     setIsLoading(false)
+  }
+}
+
+const handleResendVerification = async () => {
+  setResendLoading(true)
+  try {
+    await resendEmailVerification()
+    setError("Verification email sent! Please check your inbox.")
+    setShowResendVerification(false)
+  } catch (err: any) {
+    setError(err.message || "Failed to resend verification email")
+  } finally {
+    setResendLoading(false)
   }
 }
 
@@ -117,6 +140,8 @@ const handleGoogleLogin = async () => {
           <p className="text-base text-houselook-darkGray">
             {message === 'house-details' 
               ? "Sign in to view house details and save your favorite properties!" 
+              : message === 'verify-email'
+              ? "Please verify your email address to complete your account setup"
               : "Sign in to continue your house hunting journey"
             }
           </p>
@@ -144,6 +169,40 @@ const handleGoogleLogin = async () => {
                     </p>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Email Verification Banner */}
+            {message === 'verify-email' && (
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4 mb-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <Mail className="w-6 h-6 text-green-600" />
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-semibold text-green-800">Email Verification Required</h3>
+                    <p className="text-sm text-green-700 mt-1">
+                      Check your email inbox and click the verification link to activate your account.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Error Message */}
+            {error && (
+              <div className={`p-4 rounded-xl mb-6 ${
+                error.includes("sent") || error.includes("successfully") 
+                  ? "bg-green-50 border border-green-200" 
+                  : "bg-red-50 border border-red-200"
+              }`}>
+                <p className={`text-sm ${
+                  error.includes("sent") || error.includes("successfully")
+                    ? "text-green-700"
+                    : "text-red-700"
+                }`}>
+                  {error}
+                </p>
               </div>
             )}
 
@@ -273,6 +332,25 @@ const handleGoogleLogin = async () => {
                 </div>
               </Button>
             </form>
+
+            {/* Resend Verification Button */}
+            {showResendVerification && (
+              <div className="pt-4 border-t border-houselook-coolGray/20">
+                <Button
+                  onClick={handleResendVerification}
+                  disabled={resendLoading}
+                  variant="outline"
+                  className="w-full border-houselook-cyan text-houselook-cyan hover:bg-houselook-cyan hover:text-white transition-all duration-300"
+                >
+                  {resendLoading ? (
+                    <div className="w-4 h-4 border-2 border-houselook-cyan/30 border-t-houselook-cyan rounded-full animate-spin mr-2"></div>
+                  ) : (
+                    <Mail className="w-4 h-4 mr-2" />
+                  )}
+                  {resendLoading ? "Sending..." : "Resend Verification Email"}
+                </Button>
+              </div>
+            )}
 
             {/* Sign Up Link */}
             <div className="text-center pt-4 border-t border-houselook-coolGray/20">
