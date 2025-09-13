@@ -51,7 +51,7 @@
     "next": "^15.4.6",
     "next-themes": "latest",
     "react": "^19.1.1",
-    "react-day-picker": "8.10.1",
+    "react-day-picker": "^9.0.0",
     "react-dom": "^19.1.1",
     "react-hook-form": "^7.54.1",
     "react-leaflet": "^5.0.0",
