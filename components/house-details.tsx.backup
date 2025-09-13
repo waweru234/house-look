@@ -1,0 +1,646 @@
+"use client"
+
+import { useState, useEffect, useMemo } from "react"
+import Image from "next/image"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
+import {
+  MapPin,
+  Phone,
+  MessageCircle,
+  Heart,
+  Share2,
+  ChevronLeft,
+  ChevronRight,
+  Wifi,
+  Car,
+  Shield,
+  Home,
+  Coins,
+  AlertCircle,
+  X,
+  Trash2,
+  Info,
+  Clock,
+} from "lucide-react"
+import { useRouter } from "next/navigation"
+import { getCurrentUser } from "@/lib/auth"
+import { getDatabase, ref, get, set } from "firebase/database"
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogAction } from "@/components/ui/alert-dialog"
+import { saveHouse, unsaveHouse, getSavedHouses } from "@/lib/houses"
+
+interface House {
+  id: number
+  title: string
+  location: string
+  price: number
+  type: string
+  images: string[]
+  amenities: string[]
+  available: boolean
+  description: string
+  features: string[]
+  agent: {
+    name: string
+    phone: string
+    whatsapp: string
+  }
+  coordinates: { lat: number; lng: number }
+}
+
+interface HouseDetailsProps {
+  house: House
+}
+
+export function HouseDetails({ house }: HouseDetailsProps) {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [isFullScreen, setIsFullScreen] = useState(false)
+  const [isSaved, setIsSaved] = useState(false)
+  const [showSaveNotification, setShowSaveNotification] = useState(false)
+  const [saveNotificationType, setSaveNotificationType] = useState<'saved' | 'removed'>('saved')
+  const [showSaveInfo, setShowSaveInfo] = useState(false)
+  const [isClient, setIsClient] = useState(false)
+
+  const router = useRouter()
+
+  const images = useMemo(() => {
+    // If images array provided, use it
+    if (Array.isArray((house as any).images) && (house as any).images.length > 0) {
+      return (house as any).images as string[]
+    }
+
+    // Collect keys like image1Url, image2url, IMAGE3URL, image4, img5, photo6, etc.
+    const urls: Array<{ idx: number; url: string }> = []
+    const anyHouse = house as any
+
+    const collectFromObject = (obj: any) => {
+      if (!obj || typeof obj !== 'object') return
+      const keys = Object.keys(obj)
+      // Primary pattern: image<number>(url)? (case-insensitive)
+      keys.forEach((key) => {
+        const match = key.match(/^image\s*(\d+)\s*(?:url)?$/i)
+        if (match) {
+          const idx = Number(match[1])
+          const val = obj[key]
+          if (typeof val === 'string' && val.trim().length > 0) {
+            urls.push({ idx, url: val })
+          }
+        }
+      })
+      // Fallback common aliases: img<number>, photo<number>
+      keys.forEach((key) => {
+        const matchImg = key.match(/^img\s*(\d+)$/i)
+        const matchPhoto = key.match(/^photo\s*(\d+)$/i)
+        const matched = matchImg || matchPhoto
+        if (matched) {
+          const idx = Number(matched[1])
+          const val = obj[key]
+          if (typeof val === 'string' && val.trim().length > 0) {
+            urls.push({ idx, url: val })
+          }
+        }
+      })
+    }
+
+    // Scan top-level
+    collectFromObject(anyHouse)
+    // Also scan nested images object if present
+    if (anyHouse.images && typeof anyHouse.images === 'object' && !Array.isArray(anyHouse.images)) {
+      collectFromObject(anyHouse.images)
+    }
+
+    // Sort by numeric index and return just URLs
+    urls.sort((a, b) => a.idx - b.idx)
+    return urls.map((x) => x.url)
+  }, [house])
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  // Check if house is saved
+  useEffect(() => {
+    if (!isClient) return
+    
+    const user = getCurrentUser()
+    if (user) {
+      getSavedHouses(user.uid).then((saved) => {
+        if (saved.includes(house.id.toString())) {
+          setIsSaved(true)
+        }
+      })
+    }
+  }, [house.id, isClient])
+
+  const handleSave = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const user = getCurrentUser()
+    if (!user) {
+      alert("You must be logged in to save houses.")
+      return
+    }
+
+    if (isSaved) {
+      await unsaveHouse(user.uid, house.id.toString())
+      setIsSaved(false)
+      setSaveNotificationType('removed')
+      setShowSaveNotification(true)
+      setTimeout(() => setShowSaveNotification(false), 3000)
+    } else {
+      await saveHouse(user.uid, house.id.toString())
+      setIsSaved(true)
+      setSaveNotificationType('saved')
+      setShowSaveNotification(true)
+      setTimeout(() => setShowSaveNotification(false), 3000)
+    }
+  }
+
+  const toggleFullScreen = () => {
+    setIsFullScreen(!isFullScreen)
+  }
+
+  const handleTopUpPoints = () => {
+    router.push("/dashboard")
+  }
+
+  const nextImage = () => {
+    setCurrentImageIndex((prev) => (images.length === 0 ? 0 : (prev === images.length - 1 ? 0 : prev + 1)))
+  }
+
+  const prevImage = () => {
+    setCurrentImageIndex((prev) => (images.length === 0 ? 0 : (prev === 0 ? images.length - 1 : prev - 1)))
+  }
+
+  const getAmenityIcon = (amenity: string) => {
+    switch (amenity.toLowerCase()) {
+      case "wi-fi":
+      case "wifi":
+        return <Wifi className="w-5 h-5" />
+      case "parking":
+        return <Car className="w-5 h-5" />
+      case "security":
+      case "24/7 security":
+        return <Shield className="w-5 h-5" />
+      default:
+        return <Home className="w-5 h-5" />
+    }
+  }
+
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-houselook-whitesmoke flex items-center justify-center p-4">
+        <Card className="max-w-md w-full bg-white shadow-professional-xl border border-houselook-coolGray/20 rounded-2xl">
+          <CardContent className="p-8 text-center">
+            <div className="w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mx-auto mb-6 animate-spin">
+              <Home className="w-8 h-8 text-white" />
+            </div>
+            <h2 className="text-2xl font-bold text-houselook-black mb-4">Loading...</h2>
+            <p className="text-houselook-darkGray">Please wait while we load the property details.</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 mt-20">
+      {/* Beautiful Save Notification */}
+      <AlertDialog open={showSaveNotification} onOpenChange={setShowSaveNotification}>
+        <AlertDialogContent className="max-w-md w-full bg-white shadow-2xl rounded-3xl p-8 border border-green-100">
+          <AlertDialogHeader className="text-center">
+            <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce ${
+              saveNotificationType === 'saved' 
+                ? 'bg-gradient-to-r from-green-400 to-emerald-500' 
+                : 'bg-gradient-to-r from-red-400 to-pink-500'
+            }`}>
+              {saveNotificationType === 'saved' ? (
+                <Heart className="w-10 h-10 text-white fill-current" />
+              ) : (
+                <Trash2 className="w-10 h-10 text-white" />
+              )}
+            </div>
+            <AlertDialogTitle className={`text-3xl font-bold mb-2 ${
+              saveNotificationType === 'saved' ? 'text-green-800' : 'text-red-800'
+            }`}>
+              {saveNotificationType === 'saved' ? 'House Saved!' : 'House Removed!'}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-600 text-lg leading-relaxed">
+              {saveNotificationType === 'saved' ? (
+                <>
+                  This property has been added to your <span className="font-semibold text-green-600">saved list</span>.
+                  <br /><br />
+                  <span className="text-sm text-gray-500">💡 It will be available for 24 hours, then automatically removed.</span>
+                </>
+              ) : (
+                <>
+                  This property has been <span className="font-semibold text-red-600">removed</span> from your saved list.
+                  <br /><br />
+                  <span className="text-sm text-gray-500">💡 You can save it again anytime!</span>
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogAction 
+            onClick={() => setShowSaveNotification(false)} 
+            className={`w-full font-bold py-4 rounded-2xl mt-6 hover:shadow-lg transition-all duration-300 hover:scale-105 text-lg ${
+              saveNotificationType === 'saved' 
+                ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white' 
+                : 'bg-gradient-to-r from-red-500 to-pink-600 text-white'
+            }`}
+          >
+            {saveNotificationType === 'saved' ? 'Awesome!' : 'Got it!'}
+          </AlertDialogAction>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Save Info Dialog */}
+      <AlertDialog open={showSaveInfo} onOpenChange={setShowSaveInfo}>
+        <AlertDialogContent className="max-w-md w-full bg-white shadow-2xl rounded-3xl p-8 border border-blue-100">
+          <AlertDialogHeader className="text-center">
+            <div className="w-20 h-20 bg-gradient-to-r from-blue-400 to-indigo-500 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Info className="w-10 h-10 text-white" />
+            </div>
+            <AlertDialogTitle className="text-3xl font-bold text-gray-800 mb-2">Save Property</AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-600 text-lg leading-relaxed">
+              <div className="space-y-4 text-left">
+                <div className="flex items-start gap-3">
+                  <Heart className="w-5 h-5 text-red-500 mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-gray-800">Save for Later</p>
+                    <p className="text-sm text-gray-600">Add this property to your saved list for easy access</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Clock className="w-5 h-5 text-blue-500 mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-gray-800">24-Hour Access</p>
+                    <p className="text-sm text-gray-600">Saved properties are available for 24 hours, then automatically removed</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Coins className="w-5 h-5 text-green-500 mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-gray-800">Free Viewing</p>
+                    <p className="text-sm text-gray-600">View saved properties for FREE - no points required!</p>
+                  </div>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogAction 
+            onClick={() => setShowSaveInfo(false)} 
+            className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold py-4 rounded-2xl mt-6 hover:shadow-lg transition-all duration-300 hover:scale-105 text-lg"
+          >
+            Got it!
+          </AlertDialogAction>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Points Display Header */}
+      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200/80 sticky top-0 z-40">
+        <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <Button
+              variant="ghost"
+              onClick={() => router.back()}
+              className="flex items-center text-gray-600 hover:text-cyan-600"
+            >
+              <ChevronLeft className="w-5 h-5 mr-1" />
+              Back to Listings
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Main content grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 lg:gap-12">
+          {/* Left Column: Gallery and Details */}
+          <div className="lg:col-span-2">
+            {/* Image Gallery */}
+            <section className="mb-8">
+              <div className="relative h-96 md:h-[550px] rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-shadow duration-300 cursor-pointer group">
+                <Image
+                  src={(images[currentImageIndex] || "/placeholder.svg")}
+                  alt={house.title}
+                  fill
+                  className="object-cover transition-transform duration-500 group-hover:scale-105"
+                  onClick={toggleFullScreen}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+
+                {images.length > 1 && (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full opacity-80 group-hover:opacity-100 transition-opacity"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation()
+                        prevImage()
+                      }}
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full opacity-80 group-hover:opacity-100 transition-opacity"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation()
+                        nextImage()
+                      }}
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </Button>
+                  </>
+                )}
+
+                <div className="absolute top-4 right-4 flex gap-2">
+                  <Button 
+                    variant="secondary" 
+                    size="icon" 
+                    className="rounded-full"
+                    onClick={handleSave}
+                  >
+                    <Heart 
+                      className={`w-5 h-5 transition-colors ${
+                        isSaved ? "text-red-500 fill-current" : "hover:text-red-500"
+                      }`}
+                    />
+                  </Button>
+                  <Button variant="secondary" size="icon" className="rounded-full">
+                    <Share2 className="w-5 h-5" />
+                  </Button>
+                </div>
+
+                <div className="absolute top-4 left-4">
+                  
+                </div>
+              </div>
+
+              {/* Image Thumbnails */}
+              {images.length > 1 && (
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {images.map((image, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setCurrentImageIndex(index)}
+                      className={`relative w-full h-24 rounded-lg overflow-hidden transition-all duration-200 ${
+                        index === currentImageIndex ? "ring-4 ring-cyan-500 shadow-md" : "hover:opacity-90"
+                      }`}
+                      aria-label={`View image ${index + 1}`}
+                    >
+                      <Image
+                        src={image || "/placeholder.svg"}
+                        alt={`${house.title} ${index + 1}`}
+                        fill
+                        className="object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Map Section */}
+            <section className="mb-8">
+              <h2 className="text-lg font-semibold mb-2 text-gray-800 flex items-center"><MapPin className="w-5 h-5 mr-2 text-cyan-500" />Location</h2>
+              <Card className="border-gray-200/80 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="text-center">
+                    <MapPin className="w-12 h-12 text-cyan-500 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">Property Location</h3>
+                    <p className="text-gray-600 mb-4">
+                      Please copy the property name and paste it on Google Maps to get the exact location.
+                    </p>
+                    <div className="bg-gray-100 p-4 rounded-lg">
+                      <p className="font-medium text-gray-800">{house.title}</p>
+                      <p className="text-sm text-gray-600 mt-1">{house.location}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </section>
+
+            {/* House Info Section */}
+            <section className="space-y-8">
+              <div className="border-b pb-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <Badge variant="outline" className="text-sm border-cyan-400 text-cyan-700 bg-cyan-50">
+                    {house.type}
+                  </Badge>
+                </div>
+                <h1 className="text-4xl font-bold text-gray-900 mb-3">{house.title}</h1>
+                <div className="flex items-center text-gray-500 text-lg">
+                  <MapPin className="w-6 h-6 mr-2 text-cyan-500" />
+                  <span>{house.location}</span>
+                </div>
+              </div>
+
+              <Card className="border-gray-200/80 shadow-sm">
+                <CardContent className="p-6">
+                  <h2 className="text-2xl font-semibold mb-4 text-gray-800">Description</h2>
+                  <p className="text-gray-600 leading-relaxed whitespace-pre-line">{house.description}</p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-gray-200/80 shadow-sm">
+                <CardContent className="p-6">
+                  <h2 className="text-2xl font-semibold mb-4 text-gray-800">Features</h2>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-gray-700">
+                    {house.features.map((feature) => (
+                      <li key={feature} className="flex items-center">
+                        <div className="w-2.5 h-2.5 bg-cyan-500 rounded-full mr-3"></div>
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+
+              <Card className="border-gray-200/80 shadow-sm">
+                <CardContent className="p-6">
+                  <h2 className="text-2xl font-semibold mb-4 text-gray-800">Amenities</h2>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {house.amenities.map((amenity) => (
+                      <div
+                        key={amenity}
+                        className="flex items-center p-3 bg-gray-100/70 rounded-lg text-gray-700"
+                      >
+                        {getAmenityIcon(amenity)}
+                        <span className="ml-3 font-medium">{amenity}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </section>
+          </div>
+
+          {/* Right Column: Sticky Sidebar */}
+          <aside className="lg:sticky lg:top-24 h-fit">
+            <Card className="border-gray-200/80 shadow-lg">
+              <CardContent className="p-6">
+                <div className="border-b pb-6 mb-6">
+                  <p className="text-lg text-gray-500">Rent per month</p>
+                  <p className="text-4xl font-bold text-cyan-600">
+                    KSh {house.price.toLocaleString()}
+                  </p>
+                </div>
+
+                {/* Enhanced Save Button Section */}
+                <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-800">Save Property</h3>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowSaveInfo(true)}
+                      className="text-blue-600 hover:text-blue-700"
+                    >
+                      <Info className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  
+                  <Button
+                    onClick={handleSave}
+                    className={`w-full py-4 text-lg font-bold transition-all duration-300 hover:scale-105 ${
+                      isSaved 
+                        ? 'bg-gradient-to-r from-red-500 to-pink-600 text-white hover:shadow-lg' 
+                        : 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:shadow-lg'
+                    }`}
+                  >
+                    <Heart className={`w-6 h-6 mr-2 ${isSaved ? 'fill-current' : ''}`} />
+                    {isSaved ? 'Remove from Saved' : 'Save Property'}
+                  </Button>
+                  
+                  <p className="text-xs text-gray-600 mt-2 text-center">
+                    💡 Saved properties are available for 24 hours
+                  </p>
+                </div>
+
+                <h2 className="text-2xl font-semibold mb-4 text-gray-800">Contact Houselook</h2>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-2xl font-bold text-gray-500">
+                      H
+                    </div>
+                    <div>
+                      <p className="font-semibold text-xl text-gray-900">Houselook</p>
+                      <p className="text-gray-500">Property Platform</p>
+                    </div>
+                  </div>
+
+                  {/* Agent Contact Information */}
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 font-medium">Phone Number</p>
+                        <p className="text-lg font-semibold text-gray-800">0793779647</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          navigator.clipboard.writeText(house.agent.phone)
+                          alert("Phone number copied to clipboard!")
+                        }}
+                        className="text-cyan-600 border-cyan-600 hover:bg-cyan-50"
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 font-medium">WhatsApp</p>
+                        <p className="text-lg font-semibold text-gray-800">0793779647</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          navigator.clipboard.writeText(house.agent.whatsapp)
+                          alert("WhatsApp number copied to clipboard!")
+                        }}
+                        className="text-green-600 border-green-600 hover:bg-green-50"
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-4">
+                    <Button
+                      className="w-full bg-cyan-600 text-white hover:bg-cyan-700 h-12 text-lg"
+                      onClick={() => window.open(`tel:$0793779647`)}
+                    >
+                      <Phone className="w-5 h-5 mr-2" />
+                      Call Houselook
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      className="w-full border-cyan-600 text-cyan-600 hover:bg-cyan-50 h-12 text-lg"
+                      onClick={() => window.open(`https://wa.me/${house.agent.whatsapp.replace("+", "")}`)}
+                    >
+                      <MessageCircle className="w-5 h-5 mr-2" />
+                      WhatsApp
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </aside>
+        </div>
+      </main>
+
+      {isFullScreen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in"
+          onClick={toggleFullScreen}
+        >
+          <div className="relative w-full h-full max-w-5xl max-h-[90vh]">
+            <Image
+              src={(images[currentImageIndex] || "/placeholder.svg")}
+              alt={house.title}
+              fill
+              className="object-contain"
+            />
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-4 right-4 rounded-full text-white bg-black/50 hover:bg-black/75"
+            onClick={toggleFullScreen}
+          >
+            <X className="w-6 h-6" />
+          </Button>
+        </div>
+      )}
+
+      {/* Mobile Sticky Bottom Bar */}
+      <footer className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm border-t border-gray-200 p-3 md:hidden shadow-top">
+        <div className="flex gap-3">
+          <Button
+            className="flex-1 bg-cyan-600 text-white hover:bg-cyan-700 h-12 text-base"
+            onClick={() => window.open(`tel:$0793779647`)}
+          >
+            <Phone className="w-5 h-5 mr-2" />
+            Call
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 border-cyan-600 text-cyan-600 hover:bg-cyan-50 h-12 text-base"
+            onClick={() => window.open(`https://wa.me/${house.agent.whatsapp.replace("+", "")}`)}
+          >
+            <MessageCircle className="w-5 h-5 mr-2" />
+            WhatsApp
+          </Button>
+        </div>
+      </footer>
+    </div>
+  )
+}
